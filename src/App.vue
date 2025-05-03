@@ -1,23 +1,27 @@
 <template>
   <div class="app-container" :class="{ 'dark-mode': isDarkMode }">
+    <link
+      href="https://fonts.googleapis.com/css2?family=BIZ+UDGothic:wght@400;700&family=BIZ+UDPMincho&display=swap"
+      rel="stylesheet"
+    />
     <div class="controls" :class="{ 'controls-hidden': !showControls }">
-      <button @click="toggleSyncMode">
-        {{ syncMode ? "Disable Sync" : "Enable Sync" }}
-      </button>
       <button @click="toggleDarkMode">
-        {{ isDarkMode ? "Light Mode" : "Dark Mode" }}
+        <span class="mode-icon">{{ isDarkMode ? "☾" : "☀" }}</span>
+      </button>
+      <button @click="toggleSyncMode">
+        {{ syncMode ? "スクロール同期 ⌘Y" : "スクロール同期 ⌘Y" }}
       </button>
       <input type="file" @change="handleFileSelect(0, $event)" accept=".epub" />
       <input type="file" @change="handleFileSelect(1, $event)" accept=".epub" />
-      <div class="version">v1.0.4</div>
+      <div class="version">v1.1.2</div>
     </div>
     <button class="toggle-controls" @click="toggleControls">
       <span class="toggle-icon">{{ showControls ? "▼" : "▲" }}</span>
       <span class="toggle-text" v-if="showControls">コントロールを隠す</span>
     </button>
     <div class="reader-container">
-      <div class="reader-wrapper">
-        <div class="toc-sidebar left" :class="{ 'toc-hidden': !showToc1 }">
+      <div class="reader-wrapper left">
+        <div class="toc-sidebar" :class="{ 'toc-hidden': !showToc1 }">
           <div class="toc-header">
             <button class="toc-toggle" @click="toggleToc(0)">
               <span class="toggle-icon">{{ showToc1 ? "▶" : "◀" }}</span>
@@ -42,14 +46,6 @@
             ref="reader1"
             @scroll="handleScroll(0)"
           ></div>
-          <div class="navigation-buttons">
-            <button class="settings-button" @click="toggleSettingsPanel(0)">
-              <span class="settings-icon">⚙️</span>
-              <span class="settings-text">フォント・レイアウト</span>
-            </button>
-            <button @click="navigatePage(0, 'prev')">Previous</button>
-            <button @click="navigatePage(0, 'next')">Next</button>
-          </div>
         </div>
         <button
           v-if="!showToc1"
@@ -59,23 +55,16 @@
           <span class="toggle-icon">◀</span>
         </button>
       </div>
-      <div class="reader-wrapper">
+      <div class="resize-handle" @mousedown="startResize"></div>
+      <div class="reader-wrapper right">
         <div class="reader-content">
           <div
             class="reader-view"
             ref="reader2"
             @scroll="handleScroll(1)"
           ></div>
-          <div class="navigation-buttons">
-            <button class="settings-button" @click="toggleSettingsPanel(1)">
-              <span class="settings-icon">⚙️</span>
-              <span class="settings-text">フォント・レイアウト</span>
-            </button>
-            <button @click="navigatePage(1, 'prev')">Previous</button>
-            <button @click="navigatePage(1, 'next')">Next</button>
-          </div>
         </div>
-        <div class="toc-sidebar right" :class="{ 'toc-hidden': !showToc2 }">
+        <div class="toc-sidebar" :class="{ 'toc-hidden': !showToc2 }">
           <div class="toc-header">
             <div class="toc-title">目次</div>
             <button class="toc-toggle" @click="toggleToc(1)">
@@ -99,7 +88,37 @@
           class="toc-show-button right"
           @click="toggleToc(1)"
         >
-          <span class="toggle-icon">◀</span>
+          <span class="toggle-icon">▶</span>
+        </button>
+      </div>
+    </div>
+    <div class="navigation-buttons">
+      <div class="navigation-group left">
+        <button class="settings-button" @click="toggleSettingsPanel(0)">
+          <span class="settings-icon">⚙️</span>
+          <span class="settings-text">フォント・レイアウト</span>
+        </button>
+        <button @click="navigatePage(0, 'prev')">
+          Previous
+          <span v-if="syncMode" class="shortcut-key">←</span>
+        </button>
+        <button @click="navigatePage(0, 'next')">
+          Next
+          <span v-if="syncMode" class="shortcut-key">→</span>
+        </button>
+      </div>
+      <div class="navigation-group right">
+        <button class="settings-button" @click="toggleSettingsPanel(1)">
+          <span class="settings-icon">⚙️</span>
+          <span class="settings-text">フォント・レイアウト</span>
+        </button>
+        <button @click="navigatePage(1, 'prev')">
+          Previous
+          <span v-if="syncMode" class="shortcut-key">←</span>
+        </button>
+        <button @click="navigatePage(1, 'next')">
+          Next
+          <span v-if="syncMode" class="shortcut-key">→</span>
         </button>
       </div>
     </div>
@@ -119,14 +138,18 @@
           <div class="settings-section">
             <h4>フォント</h4>
             <div class="setting-item">
-              <label>フォントファミリー</label>
+              <label>フォント</label>
               <select
                 v-model="settings[showSettingsPanel].fontFamily"
                 @change="applySettings"
               >
-                <option value="serif">明朝体</option>
-                <option value="sans-serif">ゴシック体</option>
-                <option value="monospace">等幅フォント</option>
+                <option value="system-ui">システムフォント</option>
+                <option value="'BIZ UD Gothic', sans-serif">
+                  Webフォント：BIZ UD ゴシック
+                </option>
+                <option value="'BIZ UD Mincho', serif">
+                  Webフォント：BIZ UD 明朝
+                </option>
               </select>
             </div>
             <div class="setting-item">
@@ -213,14 +236,14 @@ const toc2 = ref([]);
 const showSettingsPanel = ref(null);
 const settings = ref([
   {
-    fontFamily: "serif",
+    fontFamily: "system-ui",
     fontSize: 16,
     lineHeight: 1.5,
     margin: 20,
     textAlign: "left",
   },
   {
-    fontFamily: "serif",
+    fontFamily: "system-ui",
     fontSize: 16,
     lineHeight: 1.5,
     margin: 20,
@@ -230,6 +253,9 @@ const settings = ref([
 
 const showToc1 = ref(true);
 const showToc2 = ref(true);
+
+const isResizing = ref(false);
+const resizeTimeout = ref(null);
 
 const initializeBook = async (book, container, index) => {
   try {
@@ -400,7 +426,10 @@ const applySettings = () => {
   if (rendition) {
     const theme = {
       body: {
-        "font-family": currentSettings.fontFamily,
+        "font-family":
+          currentSettings.fontFamily === "system-ui"
+            ? "system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif"
+            : currentSettings.fontFamily,
         "font-size": `${currentSettings.fontSize}px`,
         "line-height": currentSettings.lineHeight,
         "text-align": currentSettings.textAlign,
@@ -653,6 +682,22 @@ const handleKeyDown = (event) => {
     event.preventDefault();
     toggleControls();
   }
+
+  if ((event.ctrlKey || event.metaKey) && event.key === "y") {
+    event.preventDefault();
+    toggleSyncMode();
+  }
+
+  // 同期モードが有効な場合のみショートカットキーを有効にする
+  if (syncMode.value) {
+    if (event.key === "ArrowLeft") {
+      event.preventDefault();
+      navigatePage(0, "prev");
+    } else if (event.key === "ArrowRight") {
+      event.preventDefault();
+      navigatePage(1, "next");
+    }
+  }
 };
 
 onMounted(() => {
@@ -675,6 +720,76 @@ const toggleToc = (index) => {
     if (rendition2) rendition2.resize();
   }, 100);
 };
+
+const startResize = (e) => {
+  if (isResizing.value) return;
+  isResizing.value = true;
+  e.preventDefault();
+
+  const container = document.querySelector(".reader-container");
+  const leftWrapper = document.querySelector(".reader-wrapper.left");
+  const rightWrapper = document.querySelector(".reader-wrapper.right");
+  const initialX = e.clientX;
+  const initialLeftWidth = leftWrapper.offsetWidth;
+  const initialRightWidth = rightWrapper.offsetWidth;
+
+  const handleMouseMove = (e) => {
+    if (!isResizing.value) return;
+    e.preventDefault();
+
+    const delta = e.clientX - initialX;
+    const newLeftWidth = Math.max(
+      200,
+      Math.min(initialLeftWidth + delta, container.offsetWidth - 200)
+    );
+    const newRightWidth = container.offsetWidth - newLeftWidth - 8;
+
+    leftWrapper.style.flex = "none";
+    rightWrapper.style.flex = "none";
+    leftWrapper.style.width = `${newLeftWidth}px`;
+    rightWrapper.style.width = `${newRightWidth}px`;
+
+    if (resizeTimeout.value) {
+      clearTimeout(resizeTimeout.value);
+    }
+    resizeTimeout.value = setTimeout(() => {
+      if (rendition1) rendition1.resize();
+      if (rendition2) rendition2.resize();
+      resizeTimeout.value = null;
+    }, 100);
+  };
+
+  const handleMouseUp = (e) => {
+    if (!isResizing.value) return;
+    e.preventDefault();
+    isResizing.value = false;
+
+    document.removeEventListener("mousemove", handleMouseMove);
+    document.removeEventListener("mouseup", handleMouseUp);
+    document.removeEventListener("mouseleave", handleMouseUp);
+
+    if (resizeTimeout.value) {
+      clearTimeout(resizeTimeout.value);
+    }
+    if (rendition1) rendition1.resize();
+    if (rendition2) rendition2.resize();
+  };
+
+  document.addEventListener("mousemove", handleMouseMove);
+  document.addEventListener("mouseup", handleMouseUp);
+  document.addEventListener("mouseleave", handleMouseUp);
+};
+
+// コンポーネントのアンマウント時にイベントリスナーをクリーンアップ
+onUnmounted(() => {
+  isResizing.value = false;
+  if (resizeTimeout.value) {
+    clearTimeout(resizeTimeout.value);
+  }
+  document.removeEventListener("mousemove", handleMouseMove);
+  document.removeEventListener("mouseup", handleMouseUp);
+  document.removeEventListener("mouseleave", handleMouseUp);
+});
 </script>
 
 <style>
@@ -684,6 +799,16 @@ body,
   padding: 0;
   width: 100vw;
   height: 100vh;
+}
+
+@font-face {
+  font-family: "BIZ UD Gothic";
+  src: url("https://fonts.googleapis.com/css2?family=BIZ+UDGothic:wght@400;700&display=swap");
+}
+
+@font-face {
+  font-family: "BIZ UD Mincho";
+  src: url("https://fonts.googleapis.com/css2?family=BIZ+UDPMincho&display=swap");
 }
 </style>
 
@@ -708,17 +833,29 @@ body,
 }
 
 .controls {
-  padding: 1rem;
+  padding: 0.5rem;
   display: flex;
-  gap: 1rem;
+  gap: 0.5rem;
   background: #f5f5f5;
   border-bottom: 1px solid #ddd;
   flex-shrink: 0;
   flex-wrap: wrap;
-  transition: transform 0.3s ease-in-out, height 0.3s ease-in-out;
+  transition: all 0.3s ease-in-out;
   transform: translateY(0);
   position: relative;
   height: auto;
+  opacity: 1;
+  visibility: visible;
+  align-items: center;
+}
+
+.controls-hidden {
+  transform: translateY(-100%);
+  height: 0;
+  padding: 0;
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
 }
 
 .dark-mode .controls {
@@ -727,17 +864,28 @@ body,
 }
 
 .controls button {
-  padding: 0.5rem 1rem;
+  padding: 0.25rem 0.5rem;
   border: none;
   border-radius: 4px;
-  background: #4a9eff;
-  color: white;
+  background: #e0e0e0;
+  color: #333333;
   cursor: pointer;
   transition: background-color 0.3s;
+  font-size: 0.9rem;
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  min-width: 32px;
+  justify-content: center;
+}
+
+.controls button:first-child {
+  padding: 0.25rem 0.5rem;
+  min-width: 40px;
 }
 
 .controls button:hover {
-  background: #3a8eef;
+  background: #d0d0d0;
 }
 
 .dark-mode .controls button {
@@ -750,18 +898,14 @@ body,
 }
 
 .controls input[type="file"] {
-  padding: 0.5rem 1rem;
+  padding: 0.25rem 0.5rem;
   border: 1px solid #ddd;
   border-radius: 4px;
   background: #ffffff;
   color: #333333;
   cursor: pointer;
   transition: background-color 0.3s, border-color 0.3s;
-}
-
-.controls input[type="file"]:hover {
-  background: #f0f0f0;
-  border-color: #ccc;
+  font-size: 0.9rem;
 }
 
 .dark-mode .controls input[type="file"] {
@@ -770,23 +914,29 @@ body,
   border-color: #404040;
 }
 
+.controls input[type="file"]:hover {
+  background: #f0f0f0;
+  border-color: #ccc;
+}
+
 .dark-mode .controls input[type="file"]:hover {
   background: #3d3d3d;
   border-color: #505050;
 }
 
 .controls input[type="file"]::-webkit-file-upload-button {
-  padding: 0.5rem 1rem;
+  padding: 0.25rem 0.5rem;
   border: none;
   border-radius: 4px;
-  background: #4a9eff;
-  color: white;
+  background: #e0e0e0;
+  color: #333333;
   cursor: pointer;
   transition: background-color 0.3s;
+  font-size: 0.9rem;
 }
 
 .controls input[type="file"]::-webkit-file-upload-button:hover {
-  background: #3a8eef;
+  background: #d0d0d0;
 }
 
 .dark-mode .controls input[type="file"]::-webkit-file-upload-button {
@@ -805,26 +955,11 @@ body,
   min-height: 0;
   margin: 0;
   padding: 0;
-  gap: 1rem;
+  gap: 0;
   width: 100%;
   box-sizing: border-box;
   position: relative;
   transition: height 0.3s ease-in-out;
-}
-
-.reader-container::after {
-  content: "";
-  position: absolute;
-  top: 0;
-  left: 50%;
-  height: 100%;
-  width: 1px;
-  background-color: #ccc;
-  z-index: 1;
-}
-
-.dark-mode .reader-container::after {
-  background-color: #404040;
 }
 
 .reader-wrapper {
@@ -839,6 +974,15 @@ body,
   box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
   width: 50%;
   box-sizing: border-box;
+  transition: none;
+}
+
+.reader-wrapper.left {
+  flex-direction: row;
+}
+
+.reader-wrapper.right {
+  flex-direction: row;
 }
 
 .dark-mode .reader-wrapper {
@@ -872,9 +1016,35 @@ body,
     max-width 0.3s ease-in-out;
 }
 
-.toc-sidebar.right {
+.controls-hidden .toc-sidebar {
+  border-top: 1px solid #ddd;
+}
+
+.dark-mode .toc-sidebar {
+  background: #2d2d2d;
+  border-right: 1px solid #404040;
+}
+
+.dark-mode .controls-hidden .toc-sidebar {
+  border-top: 1px solid #404040;
+}
+
+.reader-wrapper.right .toc-sidebar {
+  order: 2;
   border-right: none;
   border-left: 1px solid #ddd;
+}
+
+.controls-hidden .reader-wrapper.right .toc-sidebar {
+  border-top: 1px solid #ddd;
+}
+
+.dark-mode .reader-wrapper.right .toc-sidebar {
+  border-left: 1px solid #404040;
+}
+
+.dark-mode .controls-hidden .reader-wrapper.right .toc-sidebar {
+  border-top: 1px solid #404040;
 }
 
 .toc-hidden {
@@ -891,10 +1061,20 @@ body,
   padding: 0.5rem;
   border-bottom: 1px solid #ddd;
   flex-shrink: 0;
+  background: #f5f5f5;
 }
 
-.toc-header.left {
-  flex-direction: row-reverse;
+.controls-hidden .toc-header {
+  background: #f5f5f5;
+}
+
+.dark-mode .toc-header {
+  border-bottom: 1px solid #404040;
+  background: #2d2d2d;
+}
+
+.dark-mode .controls-hidden .toc-header {
+  background: #2d2d2d;
 }
 
 .toc-toggle {
@@ -921,18 +1101,6 @@ body,
   flex: 1;
 }
 
-.reader-content {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  min-width: 0;
-  margin: 0;
-  padding: 0;
-  width: calc(100% - 200px);
-  box-sizing: border-box;
-  transition: width 0.3s ease-in-out;
-}
-
 .toc-hidden + .reader-content {
   width: 100%;
 }
@@ -945,6 +1113,11 @@ body,
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  color: #333333;
+}
+
+.dark-mode .toc-item {
+  color: #e0e0e0;
 }
 
 .toc-item:hover {
@@ -958,13 +1131,14 @@ body,
 .reader-view {
   flex: 1;
   overflow-y: auto;
-  padding: 1rem;
+  padding: 0;
   background-color: #ffffff;
   color: #333333;
   min-height: 0;
   margin: 0;
   width: 100%;
   box-sizing: border-box;
+  position: relative;
 }
 
 .dark-mode .reader-view {
@@ -972,9 +1146,145 @@ body,
   color: #e0e0e0;
 }
 
+.reader-view :deep(body) {
+  margin: 0;
+  padding: 0;
+  font-family: inherit;
+  font-size: inherit;
+  line-height: inherit;
+  color: inherit;
+  background-color: inherit;
+}
+
+.reader-view :deep(p) {
+  margin: 0;
+  padding: 0;
+  font-family: inherit;
+  font-size: inherit;
+  line-height: inherit;
+  color: inherit;
+}
+
+.reader-view :deep(div) {
+  margin: 0;
+  padding: 0;
+  font-family: inherit;
+  font-size: inherit;
+  line-height: inherit;
+  color: inherit;
+  background-color: inherit;
+}
+
+.reader-view :deep(section) {
+  margin: 0;
+  padding: 0;
+  font-family: inherit;
+  font-size: inherit;
+  line-height: inherit;
+  color: inherit;
+  background-color: inherit;
+}
+
+.reader-view :deep(article) {
+  margin: 0;
+  padding: 0;
+  font-family: inherit;
+  font-size: inherit;
+  line-height: inherit;
+  color: inherit;
+  background-color: inherit;
+}
+
+.reader-view :deep(chapter) {
+  margin: 0;
+  padding: 0;
+  font-family: inherit;
+  font-size: inherit;
+  line-height: inherit;
+  color: inherit;
+  background-color: inherit;
+}
+
+.reader-view :deep(h1),
+.reader-view :deep(h2),
+.reader-view :deep(h3),
+.reader-view :deep(h4),
+.reader-view :deep(h5),
+.reader-view :deep(h6) {
+  margin: 0;
+  padding: 0;
+  font-family: inherit;
+  font-size: inherit;
+  line-height: inherit;
+  color: inherit;
+  background-color: inherit;
+}
+
+.reader-view :deep(img) {
+  margin: 0;
+  padding: 0;
+  max-width: 100%;
+  height: auto;
+  display: block;
+}
+
+.reader-view :deep(blockquote) {
+  margin: 0;
+  padding: 0;
+  font-family: inherit;
+  font-size: inherit;
+  line-height: inherit;
+  color: inherit;
+  background-color: inherit;
+}
+
+.reader-view :deep(ul),
+.reader-view :deep(ol) {
+  margin: 0;
+  padding: 0;
+  font-family: inherit;
+  font-size: inherit;
+  line-height: inherit;
+  color: inherit;
+  background-color: inherit;
+}
+
+.reader-view :deep(li) {
+  margin: 0;
+  padding: 0;
+  font-family: inherit;
+  font-size: inherit;
+  line-height: inherit;
+  color: inherit;
+  background-color: inherit;
+}
+
+.reader-view :deep(table) {
+  margin: 0;
+  padding: 0;
+  border-collapse: collapse;
+  width: 100%;
+  font-family: inherit;
+  font-size: inherit;
+  line-height: inherit;
+  color: inherit;
+  background-color: inherit;
+}
+
+.reader-view :deep(td),
+.reader-view :deep(th) {
+  margin: 0;
+  padding: 0;
+  font-family: inherit;
+  font-size: inherit;
+  line-height: inherit;
+  color: inherit;
+  background-color: inherit;
+}
+
 .navigation-buttons {
   display: flex;
-  justify-content: center;
+  justify-content: space-between;
   gap: 1rem;
   padding: 1rem;
   background: #f5f5f5;
@@ -987,6 +1297,12 @@ body,
   border-top: 1px solid #404040;
 }
 
+.navigation-group {
+  display: flex;
+  gap: 1rem;
+  align-items: center;
+}
+
 .settings-button {
   display: flex;
   align-items: center;
@@ -994,14 +1310,23 @@ body,
   padding: 0.5rem 1rem;
   border: none;
   border-radius: 4px;
-  background: #4a9eff;
-  color: white;
+  background: #e0e0e0;
+  color: #333333;
   cursor: pointer;
   transition: background-color 0.3s;
 }
 
 .settings-button:hover {
-  background: #3a8eef;
+  background: #d0d0d0;
+}
+
+.dark-mode .settings-button {
+  background: #404040;
+  color: #e0e0e0;
+}
+
+.dark-mode .settings-button:hover {
+  background: #505050;
 }
 
 .settings-icon {
@@ -1012,34 +1337,36 @@ body,
   font-size: 0.9rem;
 }
 
-.dark-mode .settings-button {
-  background: #0066cc;
-}
-
-.dark-mode .settings-button:hover {
-  background: #0055bb;
-}
-
 .navigation-buttons button {
   padding: 0.5rem 1rem;
   border: none;
   border-radius: 4px;
-  background: #4a9eff;
-  color: white;
+  background: #e0e0e0;
+  color: #333333;
   cursor: pointer;
   transition: background-color 0.3s;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
 }
 
 .navigation-buttons button:hover {
-  background: #3a8eef;
+  background: #d0d0d0;
 }
 
 .dark-mode .navigation-buttons button {
-  background: #0066cc;
+  background: #404040;
+  color: #e0e0e0;
 }
 
 .dark-mode .navigation-buttons button:hover {
-  background: #0055bb;
+  background: #505050;
+}
+
+.shortcut-key {
+  font-size: 0.9rem;
+  opacity: 0.8;
+  margin-left: 0.25rem;
 }
 
 .error-message {
@@ -1182,16 +1509,12 @@ body,
 .settings-panel {
   background: #ffffff;
   border-radius: 8px;
-  width: 400px;
+  width: 500px;
   max-width: 90%;
   max-height: 90vh;
   overflow-y: auto;
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
-}
-
-.dark-mode .settings-panel {
-  background: #2d2d2d;
-  color: #e0e0e0;
+  color: #333333;
 }
 
 .settings-header {
@@ -1200,15 +1523,13 @@ body,
   align-items: center;
   padding: 1rem;
   border-bottom: 1px solid #ddd;
-}
-
-.dark-mode .settings-header {
-  border-bottom-color: #404040;
+  background: #f5f5f5;
 }
 
 .settings-header h3 {
   margin: 0;
   font-size: 1.2rem;
+  color: #333333;
 }
 
 .close-button {
@@ -1217,23 +1538,32 @@ body,
   font-size: 1.5rem;
   cursor: pointer;
   color: #666;
+  padding: 0.25rem;
+  border-radius: 4px;
+  transition: background-color 0.3s;
 }
 
-.dark-mode .close-button {
-  color: #999;
+.close-button:hover {
+  background: rgba(0, 0, 0, 0.1);
 }
 
 .settings-content {
   padding: 1rem;
+  background: #ffffff;
 }
 
 .settings-section {
   margin-bottom: 1.5rem;
+  background: #ffffff;
+  padding: 1rem;
+  border-radius: 4px;
+  border: 1px solid #eee;
 }
 
 .settings-section h4 {
   margin: 0 0 1rem 0;
   font-size: 1rem;
+  color: #333333;
 }
 
 .setting-item {
@@ -1244,47 +1574,80 @@ body,
 }
 
 .setting-item label {
-  min-width: 100px;
+  min-width: 120px;
+  color: #333333;
 }
 
-.setting-item select,
+.setting-item select {
+  flex: 1;
+  min-width: 200px;
+  padding: 0.5rem;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  background: #ffffff;
+  color: #333333;
+}
+
 .setting-item input[type="range"] {
   flex: 1;
+  min-width: 200px;
+  margin: 0 1rem;
 }
 
 .setting-item span {
-  min-width: 40px;
+  min-width: 50px;
   text-align: right;
+  color: #666;
 }
 
-/* スクロールバーのスタイル */
-.settings-panel::-webkit-scrollbar {
-  width: 8px;
+/* ダークモードのスタイル */
+.dark-mode .settings-panel {
+  background: #2d2d2d;
+  color: #e0e0e0;
 }
 
-.settings-panel::-webkit-scrollbar-track {
-  background: #f1f1f1;
+.dark-mode .settings-header {
+  background: #1a1a1a;
+  border-bottom: 1px solid #404040;
 }
 
-.dark-mode .settings-panel::-webkit-scrollbar-track {
+.dark-mode .settings-header h3 {
+  color: #e0e0e0;
+}
+
+.dark-mode .close-button {
+  color: #999;
+}
+
+.dark-mode .close-button:hover {
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.dark-mode .settings-content {
   background: #2d2d2d;
 }
 
-.settings-panel::-webkit-scrollbar-thumb {
-  background: #888;
-  border-radius: 4px;
+.dark-mode .settings-section {
+  background: #2d2d2d;
+  border: 1px solid #404040;
 }
 
-.dark-mode .settings-panel::-webkit-scrollbar-thumb {
-  background: #555;
+.dark-mode .settings-section h4 {
+  color: #e0e0e0;
 }
 
-.settings-panel::-webkit-scrollbar-thumb:hover {
-  background: #666;
+.dark-mode .setting-item label {
+  color: #e0e0e0;
 }
 
-.dark-mode .settings-panel::-webkit-scrollbar-thumb:hover {
-  background: #444;
+.dark-mode .setting-item select {
+  background: #1a1a1a;
+  border: 1px solid #404040;
+  color: #e0e0e0;
+}
+
+.dark-mode .setting-item span {
+  color: #999;
 }
 
 .toggle-controls {
@@ -1292,7 +1655,7 @@ body,
   top: 10px;
   right: 10px;
   z-index: 1000;
-  padding: 8px 16px;
+  padding: 4px 8px;
   background-color: #ffffff;
   color: #213547;
   border: 1px solid #213547;
@@ -1300,9 +1663,10 @@ body,
   cursor: pointer;
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 4px;
   transition: all 0.3s ease;
   box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+  font-size: 0.8rem;
 }
 
 .toggle-controls:hover {
@@ -1311,13 +1675,13 @@ body,
 }
 
 .toggle-icon {
-  font-size: 1.2rem;
+  font-size: 0.9rem;
   line-height: 1;
   font-weight: bold;
 }
 
 .toggle-text {
-  font-size: 0.9rem;
+  font-size: 0.7rem;
   font-weight: 500;
 }
 
@@ -1329,9 +1693,9 @@ body,
 
 .version {
   position: absolute;
-  bottom: 0.5rem;
-  right: 0.5rem;
-  font-size: 0.8rem;
+  bottom: 0.25rem;
+  right: 0.25rem;
+  font-size: 0.7rem;
   color: #666;
   z-index: 1000;
 }
@@ -1356,16 +1720,6 @@ body,
   visibility: hidden;
 }
 
-.reader-wrapper:hover .toc-show-button {
-  visibility: visible;
-  opacity: 0.5;
-}
-
-.toc-show-button:hover {
-  background: rgba(0, 0, 0, 0.2);
-  opacity: 1;
-}
-
 .toc-show-button.left {
   left: 0;
   border-top-left-radius: 0;
@@ -1380,6 +1734,16 @@ body,
   border-top-left-radius: 0;
 }
 
+.reader-wrapper:hover .toc-show-button {
+  visibility: visible;
+  opacity: 0.5;
+}
+
+.toc-show-button:hover {
+  background: rgba(0, 0, 0, 0.2);
+  opacity: 1;
+}
+
 .dark-mode .toc-show-button {
   background: rgba(255, 255, 255, 0.1);
 }
@@ -1392,5 +1756,38 @@ body,
   font-size: 1rem;
   line-height: 1;
   font-weight: bold;
+}
+
+.resize-handle {
+  width: 8px;
+  background-color: #ccc;
+  cursor: col-resize;
+  transition: background-color 0.3s;
+  position: relative;
+  z-index: 2;
+  flex-shrink: 0;
+  user-select: none;
+  touch-action: none; /* タッチデバイスでのパフォーマンスを改善 */
+}
+
+.resize-handle:hover,
+.resize-handle:active {
+  background-color: #999;
+}
+
+.dark-mode .resize-handle {
+  background-color: #404040;
+}
+
+.dark-mode .resize-handle:hover,
+.dark-mode .resize-handle:active {
+  background-color: #666;
+}
+
+.mode-icon {
+  font-size: 1.2rem;
+  line-height: 1;
+  color: inherit;
+  transition: color 0.3s;
 }
 </style>
