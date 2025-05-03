@@ -1,6 +1,6 @@
 <template>
   <div class="app-container" :class="{ 'dark-mode': isDarkMode }">
-    <div class="version">v1.0.0</div>
+    <div class="version">v1.0.1</div>
     <div class="controls">
       <button @click="toggleSyncMode">
         {{ syncMode ? "Disable Sync" : "Enable Sync" }}
@@ -702,6 +702,22 @@ body,
   gap: 1rem;
   width: 100%;
   box-sizing: border-box;
+  position: relative;
+}
+
+.reader-container::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 50%;
+  height: 100%;
+  width: 1px;
+  background-color: #ccc;
+  z-index: 1;
+}
+
+.dark-mode .reader-container::after {
+  background-color: #404040;
 }
 
 .reader-wrapper {
