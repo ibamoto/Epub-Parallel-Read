@@ -1,5 +1,6 @@
 <template>
   <div class="app-container" :class="{ 'dark-mode': isDarkMode }">
+    <div class="version">v1.0.0</div>
     <div class="controls">
       <button @click="toggleSyncMode">
         {{ syncMode ? "Disable Sync" : "Enable Sync" }}
@@ -33,6 +34,10 @@
             @scroll="handleScroll(0)"
           ></div>
           <div class="navigation-buttons">
+            <button class="settings-button" @click="toggleSettingsPanel(0)">
+              <span class="settings-icon">⚙️</span>
+              <span class="settings-text">フォント・レイアウト</span>
+            </button>
             <button @click="navigatePage(0, 'prev')">Previous</button>
             <button @click="navigatePage(0, 'next')">Next</button>
           </div>
@@ -46,6 +51,10 @@
             @scroll="handleScroll(1)"
           ></div>
           <div class="navigation-buttons">
+            <button class="settings-button" @click="toggleSettingsPanel(1)">
+              <span class="settings-icon">⚙️</span>
+              <span class="settings-text">フォント・レイアウト</span>
+            </button>
             <button @click="navigatePage(1, 'prev')">Previous</button>
             <button @click="navigatePage(1, 'next')">Next</button>
           </div>
@@ -66,6 +75,87 @@
         </div>
       </div>
     </div>
+
+    <!-- 設定パネル -->
+    <div
+      v-if="showSettingsPanel !== null"
+      class="settings-panel-overlay"
+      @click="closeSettingsPanel"
+    >
+      <div class="settings-panel" @click.stop>
+        <div class="settings-header">
+          <h3>フォント・レイアウト設定</h3>
+          <button class="close-button" @click="closeSettingsPanel">×</button>
+        </div>
+        <div class="settings-content">
+          <div class="settings-section">
+            <h4>フォント</h4>
+            <div class="setting-item">
+              <label>フォントファミリー</label>
+              <select
+                v-model="settings[showSettingsPanel].fontFamily"
+                @change="applySettings"
+              >
+                <option value="serif">明朝体</option>
+                <option value="sans-serif">ゴシック体</option>
+                <option value="monospace">等幅フォント</option>
+              </select>
+            </div>
+            <div class="setting-item">
+              <label>フォントサイズ</label>
+              <input
+                type="range"
+                v-model="settings[showSettingsPanel].fontSize"
+                min="12"
+                max="24"
+                step="1"
+                @input="applySettings"
+              />
+              <span>{{ settings[showSettingsPanel].fontSize }}px</span>
+            </div>
+            <div class="setting-item">
+              <label>行間</label>
+              <input
+                type="range"
+                v-model="settings[showSettingsPanel].lineHeight"
+                min="1"
+                max="2"
+                step="0.1"
+                @input="applySettings"
+              />
+              <span>{{ settings[showSettingsPanel].lineHeight }}</span>
+            </div>
+          </div>
+          <div class="settings-section">
+            <h4>レイアウト</h4>
+            <div class="setting-item">
+              <label>余白</label>
+              <input
+                type="range"
+                v-model="settings[showSettingsPanel].margin"
+                min="0"
+                max="50"
+                step="5"
+                @input="applySettings"
+              />
+              <span>{{ settings[showSettingsPanel].margin }}px</span>
+            </div>
+            <div class="setting-item">
+              <label>テキストの配置</label>
+              <select
+                v-model="settings[showSettingsPanel].textAlign"
+                @change="applySettings"
+              >
+                <option value="left">左揃え</option>
+                <option value="justify">両端揃え</option>
+                <option value="center">中央揃え</option>
+              </select>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
     <div v-if="errorMessage" class="error-message">
       {{ errorMessage }}
     </div>
@@ -90,6 +180,25 @@ let isSyncing = false;
 const toc1 = ref([]);
 const toc2 = ref([]);
 
+// 設定関連の状態
+const showSettingsPanel = ref(null);
+const settings = ref([
+  {
+    fontFamily: "serif",
+    fontSize: 16,
+    lineHeight: 1.5,
+    margin: 20,
+    textAlign: "left",
+  },
+  {
+    fontFamily: "serif",
+    fontSize: 16,
+    lineHeight: 1.5,
+    margin: 20,
+    textAlign: "left",
+  },
+]);
+
 const initializeBook = async (book, container, index) => {
   try {
     console.log(`Initializing book ${index}...`);
@@ -109,6 +218,9 @@ const initializeBook = async (book, container, index) => {
       manager: "default",
       flow: "scrolled",
       snap: false,
+      allowScriptedContent: true,
+      allowPopups: true,
+      allowSameOrigin: true,
     });
 
     // テーマを適用
@@ -119,6 +231,7 @@ const initializeBook = async (book, container, index) => {
 
     // レンダリング後にリサイズをトリガー
     setTimeout(() => {
+      rendition.resize();
       window.dispatchEvent(new Event("resize"));
     }, 100);
 
@@ -147,6 +260,181 @@ const processToc = (toc) => {
   return result;
 };
 
+// 前回の状態を保存する関数
+const saveState = () => {
+  const state = {
+    file1: book1?.key,
+    file2: book2?.key,
+    position1: rendition1?.location?.start?.cfi,
+    position2: rendition2?.location?.start?.cfi,
+    syncMode: syncMode.value,
+    darkMode: isDarkMode.value,
+    settings: settings.value,
+  };
+  localStorage.setItem("epubReaderState", JSON.stringify(state));
+};
+
+// スクロール位置を保存
+const handleScroll = (index) => {
+  if (!syncMode.value || isSyncing) return;
+
+  isSyncing = true;
+  const sourceReader = index === 0 ? reader1.value : reader2.value;
+  const targetReader = index === 0 ? reader2.value : reader1.value;
+
+  if (sourceReader && targetReader) {
+    const scrollRatio =
+      sourceReader.scrollTop /
+      (sourceReader.scrollHeight - sourceReader.clientHeight);
+    const targetScroll =
+      scrollRatio * (targetReader.scrollHeight - targetReader.clientHeight);
+    targetReader.scrollTop = targetScroll;
+  }
+
+  // スクロール時に状態を保存
+  saveState();
+
+  setTimeout(() => {
+    isSyncing = false;
+  }, 50);
+};
+
+// ページ移動時に状態を保存
+const navigatePage = async (index, direction) => {
+  const rendition = index === 0 ? rendition1 : rendition2;
+  const otherRendition = index === 0 ? rendition2 : rendition1;
+  if (!rendition) return;
+
+  try {
+    if (direction === "prev") {
+      await rendition.prev();
+      if (syncMode.value && otherRendition) {
+        await otherRendition.prev();
+      }
+    } else {
+      await rendition.next();
+      if (syncMode.value && otherRendition) {
+        await otherRendition.next();
+      }
+    }
+    saveState();
+  } catch (error) {
+    console.error(
+      `Error navigating ${direction} page for reader ${index}:`,
+      error
+    );
+    errorMessage.value = `Error navigating ${direction} page for reader ${
+      index + 1
+    }: ${error.message}`;
+  }
+};
+
+// 目次から移動時に状態を保存
+const navigateToLocation = async (index, href) => {
+  const rendition = index === 0 ? rendition1 : rendition2;
+  if (!rendition) return;
+
+  try {
+    await rendition.display(href);
+    saveState();
+  } catch (error) {
+    console.error(`Error navigating to location for reader ${index}:`, error);
+    errorMessage.value = `Error navigating to location for reader ${
+      index + 1
+    }: ${error.message}`;
+  }
+};
+
+// アプリ起動時に前回の状態を復元
+onMounted(async () => {
+  const savedState = localStorage.getItem("epubReaderState");
+  if (savedState) {
+    const state = JSON.parse(savedState);
+    syncMode.value = state.syncMode;
+    isDarkMode.value = state.darkMode;
+    if (state.settings) {
+      settings.value = state.settings;
+    }
+  }
+});
+
+// 設定の適用
+const applySettings = () => {
+  if (showSettingsPanel.value === null) return;
+
+  const currentSettings = settings.value[showSettingsPanel.value];
+  const rendition = showSettingsPanel.value === 0 ? rendition1 : rendition2;
+
+  if (rendition) {
+    const theme = {
+      body: {
+        "font-family": currentSettings.fontFamily,
+        "font-size": `${currentSettings.fontSize}px`,
+        "line-height": currentSettings.lineHeight,
+        "text-align": currentSettings.textAlign,
+      },
+      "body > *": {
+        "margin-left": `${currentSettings.margin}px`,
+        "margin-right": `${currentSettings.margin}px`,
+      },
+      "body > p": {
+        "margin-top": `${currentSettings.margin}px`,
+        "margin-bottom": `${currentSettings.margin}px`,
+      },
+    };
+
+    rendition.themes.register("custom", theme);
+    rendition.themes.select("custom");
+
+    // 設定を保存
+    saveState();
+  }
+};
+
+// 設定を初期化して適用する関数
+const initializeAndApplySettings = (index) => {
+  const rendition = index === 0 ? rendition1 : rendition2;
+  if (!rendition) return;
+
+  // 保存された設定を取得
+  const savedState = localStorage.getItem("epubReaderState");
+  if (savedState) {
+    const state = JSON.parse(savedState);
+    if (state.settings && state.settings[index]) {
+      // 設定を初期化
+      settings.value[index] = {
+        fontFamily: state.settings[index].fontFamily || "serif",
+        fontSize: state.settings[index].fontSize || 16,
+        lineHeight: state.settings[index].lineHeight || 1.5,
+        margin: state.settings[index].margin || 20,
+        textAlign: state.settings[index].textAlign || "left",
+      };
+
+      // 設定を適用
+      const theme = {
+        body: {
+          "font-family": settings.value[index].fontFamily,
+          "font-size": `${settings.value[index].fontSize}px`,
+          "line-height": settings.value[index].lineHeight,
+          "text-align": settings.value[index].textAlign,
+        },
+        "body > *": {
+          "margin-left": `${settings.value[index].margin}px`,
+          "margin-right": `${settings.value[index].margin}px`,
+        },
+        "body > p": {
+          "margin-top": `${settings.value[index].margin}px`,
+          "margin-bottom": `${settings.value[index].margin}px`,
+        },
+      };
+
+      rendition.themes.register("custom", theme);
+      rendition.themes.select("custom");
+    }
+  }
+};
+
+// ファイル選択時に前回の位置を復元
 const handleFileSelect = async (index, event) => {
   const file = event.target.files[0];
   if (!file) {
@@ -189,6 +477,31 @@ const handleFileSelect = async (index, event) => {
             book2 = book;
             rendition2 = await initializeBook(book, reader2.value, index);
           }
+
+          // 前回の位置を復元
+          const savedState = localStorage.getItem("epubReaderState");
+          if (savedState) {
+            const state = JSON.parse(savedState);
+            const savedPosition =
+              index === 0 ? state.position1 : state.position2;
+            if (savedPosition) {
+              const rendition = index === 0 ? rendition1 : rendition2;
+              await rendition.display(savedPosition);
+            }
+          }
+
+          // 設定を初期化して適用
+          initializeAndApplySettings(index);
+
+          // レンダリング後にリサイズをトリガー
+          setTimeout(() => {
+            if (index === 0 && rendition1) {
+              rendition1.resize();
+            } else if (index === 1 && rendition2) {
+              rendition2.resize();
+            }
+          }, 200);
+
           resolve();
         } catch (error) {
           console.error(`Error processing book ${index}:`, error);
@@ -267,69 +580,6 @@ const applyTheme = (rendition) => {
   rendition.themes.select("default");
 };
 
-const handleScroll = (index) => {
-  if (!syncMode.value || isSyncing) return;
-
-  isSyncing = true;
-  const sourceReader = index === 0 ? reader1.value : reader2.value;
-  const targetReader = index === 0 ? reader2.value : reader1.value;
-
-  if (sourceReader && targetReader) {
-    const scrollRatio =
-      sourceReader.scrollTop /
-      (sourceReader.scrollHeight - sourceReader.clientHeight);
-    const targetScroll =
-      scrollRatio * (targetReader.scrollHeight - targetReader.clientHeight);
-    targetReader.scrollTop = targetScroll;
-  }
-
-  setTimeout(() => {
-    isSyncing = false;
-  }, 50);
-};
-
-const navigatePage = async (index, direction) => {
-  const rendition = index === 0 ? rendition1 : rendition2;
-  const otherRendition = index === 0 ? rendition2 : rendition1;
-  if (!rendition) return;
-
-  try {
-    if (direction === "prev") {
-      await rendition.prev();
-      if (syncMode.value && otherRendition) {
-        await otherRendition.prev();
-      }
-    } else {
-      await rendition.next();
-      if (syncMode.value && otherRendition) {
-        await otherRendition.next();
-      }
-    }
-  } catch (error) {
-    console.error(
-      `Error navigating ${direction} page for reader ${index}:`,
-      error
-    );
-    errorMessage.value = `Error navigating ${direction} page for reader ${
-      index + 1
-    }: ${error.message}`;
-  }
-};
-
-const navigateToLocation = async (index, href) => {
-  const rendition = index === 0 ? rendition1 : rendition2;
-  if (!rendition) return;
-
-  try {
-    await rendition.display(href);
-  } catch (error) {
-    console.error(`Error navigating to location for reader ${index}:`, error);
-    errorMessage.value = `Error navigating to location for reader ${
-      index + 1
-    }: ${error.message}`;
-  }
-};
-
 // リサイズハンドラを追加
 onMounted(() => {
   window.addEventListener("resize", handleResize);
@@ -350,6 +600,15 @@ const handleResize = () => {
   if (rendition2) {
     rendition2.resize();
   }
+};
+
+// 設定パネルの表示/非表示
+const toggleSettingsPanel = (index) => {
+  showSettingsPanel.value = showSettingsPanel.value === index ? null : index;
+};
+
+const closeSettingsPanel = () => {
+  showSettingsPanel.value = null;
 };
 </script>
 
@@ -381,6 +640,19 @@ body,
 .app-container.dark-mode {
   background-color: #1a1a1a;
   color: #e0e0e0;
+}
+
+.version {
+  position: fixed;
+  top: 0.5rem;
+  right: 0.5rem;
+  font-size: 0.8rem;
+  color: #666;
+  z-index: 1000;
+}
+
+.dark-mode .version {
+  color: #999;
 }
 
 .controls {
@@ -552,6 +824,39 @@ body,
   border-top: 1px solid #404040;
 }
 
+.settings-button {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem 1rem;
+  border: none;
+  border-radius: 4px;
+  background: #4a9eff;
+  color: white;
+  cursor: pointer;
+  transition: background-color 0.3s;
+}
+
+.settings-button:hover {
+  background: #3a8eef;
+}
+
+.settings-icon {
+  font-size: 1rem;
+}
+
+.settings-text {
+  font-size: 0.9rem;
+}
+
+.dark-mode .settings-button {
+  background: #0066cc;
+}
+
+.dark-mode .settings-button:hover {
+  background: #0055bb;
+}
+
 .navigation-buttons button {
   padding: 0.5rem 1rem;
   border: none;
@@ -695,5 +1000,127 @@ body,
   .reader-content {
     width: 100%;
   }
+}
+
+/* 設定パネルのスタイル */
+.settings-panel-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  z-index: 2000;
+}
+
+.settings-panel {
+  background: #ffffff;
+  border-radius: 8px;
+  width: 400px;
+  max-width: 90%;
+  max-height: 90vh;
+  overflow-y: auto;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+}
+
+.dark-mode .settings-panel {
+  background: #2d2d2d;
+  color: #e0e0e0;
+}
+
+.settings-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 1rem;
+  border-bottom: 1px solid #ddd;
+}
+
+.dark-mode .settings-header {
+  border-bottom-color: #404040;
+}
+
+.settings-header h3 {
+  margin: 0;
+  font-size: 1.2rem;
+}
+
+.close-button {
+  background: none;
+  border: none;
+  font-size: 1.5rem;
+  cursor: pointer;
+  color: #666;
+}
+
+.dark-mode .close-button {
+  color: #999;
+}
+
+.settings-content {
+  padding: 1rem;
+}
+
+.settings-section {
+  margin-bottom: 1.5rem;
+}
+
+.settings-section h4 {
+  margin: 0 0 1rem 0;
+  font-size: 1rem;
+}
+
+.setting-item {
+  display: flex;
+  align-items: center;
+  margin-bottom: 1rem;
+  gap: 1rem;
+}
+
+.setting-item label {
+  min-width: 100px;
+}
+
+.setting-item select,
+.setting-item input[type="range"] {
+  flex: 1;
+}
+
+.setting-item span {
+  min-width: 40px;
+  text-align: right;
+}
+
+/* スクロールバーのスタイル */
+.settings-panel::-webkit-scrollbar {
+  width: 8px;
+}
+
+.settings-panel::-webkit-scrollbar-track {
+  background: #f1f1f1;
+}
+
+.dark-mode .settings-panel::-webkit-scrollbar-track {
+  background: #2d2d2d;
+}
+
+.settings-panel::-webkit-scrollbar-thumb {
+  background: #888;
+  border-radius: 4px;
+}
+
+.dark-mode .settings-panel::-webkit-scrollbar-thumb {
+  background: #555;
+}
+
+.settings-panel::-webkit-scrollbar-thumb:hover {
+  background: #666;
+}
+
+.dark-mode .settings-panel::-webkit-scrollbar-thumb:hover {
+  background: #444;
 }
 </style>
