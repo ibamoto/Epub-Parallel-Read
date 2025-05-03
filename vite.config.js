@@ -4,9 +4,10 @@ import path from "path";
 
 export default defineConfig({
   plugins: [vue()],
-  base: process.env.NODE_ENV === "development" ? "/" : "./",
+  base: "./",
   build: {
     outDir: "dist",
+    assetsDir: "assets",
     emptyOutDir: true,
   },
   resolve: {
@@ -15,7 +16,7 @@ export default defineConfig({
     },
   },
   server: {
-    port: 5174,
+    port: 5173,
     strictPort: true,
   },
 });
