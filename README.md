@@ -3,7 +3,7 @@ Cursor頼りで作っている ＋ epub.jsが古いなので、少々無茶な�
 consoleではエラー出てたりしますが、使えるのでリリース。
 
 
-# EPUB Reader
+# Parallel EPUB Reader
 
 EPUB ファイルを 2 画面で同時に読むことができるデスクトップアプリケーションです。
 
