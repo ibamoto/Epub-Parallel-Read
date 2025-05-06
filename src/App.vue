@@ -1038,6 +1038,7 @@ body,
   box-sizing: border-box;
   position: relative;
   transition: height 0.3s ease-in-out;
+  scrollbar-color: #e2e2e2 #ffffff;
 }
 
 .reader-wrapper {
@@ -1232,6 +1233,7 @@ body,
 .dark-mode .reader-view {
   background-color: #1a1a1a;
   color: #e0e0e0;
+  scrollbar-color: #313131 #1b1b1b;
 }
 
 .reader-view :deep(body) {
@@ -1957,5 +1959,16 @@ body,
 
 .dark-mode .setting-item span {
   color: #ccc;
+}
+
+.toc-content {
+  flex: 1;
+  overflow: auto;
+  scrollbar-color: #e2e2e2 #ffffff;
+  padding: 0.5rem;
+}
+
+.dark-mode .toc-content {
+  scrollbar-color: #404040 #2d2d2d;
 }
 </style>
