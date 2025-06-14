@@ -38,4 +38,21 @@ contextBridge.exposeInMainWorld("myFS", {
   },
 });
 
-contextBridge.exposeInMainWorld("appVersion", version);
+contextBridge.exposeInMainWorld(
+  "appVersion",
+  process.env.npm_package_version || "1.0.0"
+);
+
+// ドラッグアンドドロップイベントの設定
+window.addEventListener("DOMContentLoaded", () => {
+  const preventDefault = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+  };
+
+  // ドラッグイベントのデフォルト動作を防止
+  document.addEventListener("dragenter", preventDefault, false);
+  document.addEventListener("dragover", preventDefault, false);
+  document.addEventListener("dragleave", preventDefault, false);
+  document.addEventListener("drop", preventDefault, false);
+});
