@@ -33,4 +33,11 @@ Thumbs.db
 
 # Build files
 release/
-dist-electron/ 
+dist-electron/
+
+# Build directories
+build/
+*.dmg
+*.exe
+*.blockmap
+latest-*.yml 
