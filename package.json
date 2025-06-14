@@ -2,6 +2,8 @@
   "name": "c-s",
   "version": "1.3.5",
   "private": true,
+  "description": "EPUB Reader Application",
+  "main": "src-electron/main.js",
   "scripts": {
     "dev": "vite",
     "build": "vite build",
@@ -23,7 +25,6 @@
     "vite-plugin-electron": "^0.15.5",
     "vite-plugin-electron-renderer": "^0.14.5"
   },
-  "main": "dist-electron/main.js",
   "build": {
     "appId": "com.c-s.app",
     "productName": "C-S",
@@ -32,7 +33,7 @@
     },
     "files": [
       "dist/**/*",
-      "dist-electron/**/*"
+      "src-electron/**/*"
     ],
     "mac": {
       "target": [
