@@ -15,8 +15,16 @@
       <button @click="toggleSyncMode">
         {{ syncMode ? "スクロール同期" : "スクロール同期" }}
       </button>
-      <input type="file" @change="handleFileSelect(0, $event)" accept=".epub" />
-      <input type="file" @change="handleFileSelect(1, $event)" accept=".epub" />
+      <input
+        type="file"
+        @change="handleFileSelect(0, $event)"
+        accept=".epub,.pdf"
+      />
+      <input
+        type="file"
+        @change="handleFileSelect(1, $event)"
+        accept=".epub,.pdf"
+      />
       <div class="version">v{{ appVersion }}</div>
     </div>
     <button class="toggle-controls" @click="toggleControls">
@@ -48,7 +56,14 @@
             </div>
           </div>
         </div>
-        <div class="reader-content">
+        <div
+          class="reader-content"
+          :class="{ dragover: isDragging === 0 }"
+          @dragenter.prevent="handleDragEnter(0)"
+          @dragleave.prevent="handleDragLeave(0)"
+          @dragover.prevent
+          @drop.prevent="handleDrop(0, $event)"
+        >
           <div
             class="reader-view"
             ref="reader1"
@@ -65,7 +80,14 @@
       </div>
       <div class="resize-handle" @mousedown="startResize"></div>
       <div class="reader-wrapper right">
-        <div class="reader-content">
+        <div
+          class="reader-content"
+          :class="{ dragover: isDragging === 1 }"
+          @dragenter.prevent="handleDragEnter(1)"
+          @dragleave.prevent="handleDragLeave(1)"
+          @dragover.prevent
+          @drop.prevent="handleDrop(1, $event)"
+        >
           <div
             class="reader-view"
             ref="reader2"
@@ -268,6 +290,9 @@ const showToc2 = ref(true);
 const isResizing = ref(false);
 const resizeTimeout = ref(null);
 
+// ドラッグ状態の管理
+const isDragging = ref(null);
+
 const initializeBook = async (book, container, index) => {
   try {
     console.log(`Initializing book ${index}...`);
@@ -358,7 +383,13 @@ const handleScroll = (index) => {
       (sourceReader.scrollHeight - sourceReader.clientHeight);
     const targetScroll =
       scrollRatio * (targetReader.scrollHeight - targetReader.clientHeight);
+
+    // スクロール位置を設定する前に、スクロールイベントの伝播を防ぐ
+    targetReader.removeEventListener("scroll", handleScroll);
     targetReader.scrollTop = targetScroll;
+    setTimeout(() => {
+      targetReader.addEventListener("scroll", handleScroll);
+    }, 50);
   }
 
   // スクロール時に状態を保存
@@ -436,6 +467,13 @@ const navigatePage = async (index, direction) => {
         await otherRendition.next();
       }
     }
+
+    // レンダリング後にリサイズをトリガー
+    setTimeout(() => {
+      if (rendition) rendition.resize();
+      if (otherRendition) otherRendition.resize();
+    }, 100);
+
     saveState();
   } catch (error) {
     console.error(
@@ -868,6 +906,91 @@ const getTocStyle = (index) => {
     "line-height": currentSettings.lineHeight,
   };
 };
+
+// ドラッグエンターハンドラ
+const handleDragEnter = (index) => {
+  isDragging.value = index;
+};
+
+// ドラッグリーブハンドラ
+const handleDragLeave = (index) => {
+  if (isDragging.value === index) {
+    isDragging.value = null;
+  }
+};
+
+// ドラッグアンドドロップハンドラ
+const handleDrop = async (index, event) => {
+  isDragging.value = null;
+  const files = event.dataTransfer.files;
+  if (files.length === 0) return;
+
+  const file = files[0];
+  if (!file.name.match(/\.(epub|pdf)$/i)) {
+    errorMessage.value = "EPUBまたはPDFファイルのみ対応しています。";
+    return;
+  }
+
+  try {
+    // ファイルを直接処理
+    const reader = new FileReader();
+    reader.onload = async (e) => {
+      try {
+        console.log(`Loading dropped file for reader ${index}:`, file.name);
+        errorMessage.value = "";
+
+        const book = Epub(e.target.result);
+        await book.ready;
+        console.log(`Book ${index} metadata loaded:`, book.metadata);
+
+        // 目次を取得して処理
+        const toc = await book.navigation;
+        if (index === 0) {
+          toc1.value = processToc(toc.toc);
+        } else {
+          toc2.value = processToc(toc.toc);
+        }
+
+        if (index === 0) {
+          book1 = book;
+          rendition1 = await initializeBook(book, reader1.value, index);
+        } else {
+          book2 = book;
+          rendition2 = await initializeBook(book, reader2.value, index);
+        }
+
+        // 設定を初期化して適用
+        initializeAndApplySettings(index);
+
+        // レンダリング後にリサイズをトリガー
+        setTimeout(() => {
+          if (index === 0 && rendition1) {
+            rendition1.resize();
+          } else if (index === 1 && rendition2) {
+            rendition2.resize();
+          }
+        }, 200);
+      } catch (error) {
+        console.error(`Error processing dropped book ${index}:`, error);
+        errorMessage.value = `Error processing book ${index + 1}: ${
+          error.message
+        }`;
+      }
+    };
+
+    reader.onerror = (error) => {
+      console.error(`File reading error for reader ${index}:`, error);
+      errorMessage.value = `Error reading file for reader ${index + 1}: ${
+        error.message
+      }`;
+    };
+
+    reader.readAsArrayBuffer(file);
+  } catch (error) {
+    console.error("Error handling dropped file:", error);
+    errorMessage.value = `ファイルの読み込み中にエラーが発生しました: ${error.message}`;
+  }
+};
 </script>
 
 <style>
@@ -1078,6 +1201,35 @@ body,
   width: calc(100% - 200px);
   box-sizing: border-box;
   transition: width 0.3s ease-in-out;
+  position: relative;
+}
+
+.reader-content::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.05);
+  opacity: 0;
+  transition: opacity 0.3s;
+  pointer-events: none;
+  border: 2px dashed rgba(0, 0, 0, 0.2);
+}
+
+.reader-content.dragover::after {
+  opacity: 1;
+  background: rgba(0, 0, 0, 0.1);
+}
+
+.dark-mode .reader-content::after {
+  background: rgba(255, 255, 255, 0.05);
+  border-color: rgba(255, 255, 255, 0.2);
+}
+
+.dark-mode .reader-content.dragover::after {
+  background: rgba(255, 255, 255, 0.1);
 }
 
 .toc-sidebar {
