@@ -15,16 +15,8 @@
       <button @click="toggleSyncMode">
         {{ syncMode ? "スクロール同期" : "スクロール同期" }}
       </button>
-      <input
-        type="file"
-        @change="handleFileSelect(0, $event)"
-        accept=".epub,.pdf"
-      />
-      <input
-        type="file"
-        @change="handleFileSelect(1, $event)"
-        accept=".epub,.pdf"
-      />
+      <input type="file" @change="handleFileSelect(0, $event)" accept=".epub" />
+      <input type="file" @change="handleFileSelect(1, $event)" accept=".epub" />
       <div class="version">v{{ appVersion }}</div>
     </div>
     <button class="toggle-controls" @click="toggleControls">
@@ -926,8 +918,8 @@ const handleDrop = async (index, event) => {
   if (files.length === 0) return;
 
   const file = files[0];
-  if (!file.name.match(/\.(epub|pdf)$/i)) {
-    errorMessage.value = "EPUBまたはPDFファイルのみ対応しています。";
+  if (!file.name.match(/\.epub$/i)) {
+    errorMessage.value = "EPUBファイルのみ対応しています。";
     return;
   }
 
