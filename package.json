@@ -1,6 +1,6 @@
 {
-  "name": "c-s",
-  "version": "1.3.5",
+  "name": "parallel-read",
+  "version": "1.3.6",
   "private": true,
   "description": "EPUB Reader Application",
   "main": "src-electron/main.js",
@@ -26,8 +26,8 @@
     "vite-plugin-electron-renderer": "^0.14.5"
   },
   "build": {
-    "appId": "com.c-s.app",
-    "productName": "C-S",
+    "appId": "com.epub.reader",
+    "productName": "Parallel Read",
     "directories": {
       "output": "release"
     },
