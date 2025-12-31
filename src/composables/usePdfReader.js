@@ -199,6 +199,9 @@ export function usePdfReader(paneIndex) {
         goToPage(savedPage)
       }
 
+      // Setup wheel event handler for scroll mode
+      setupWheelHandler()
+
       isReady.value = true
 
     } catch (error) {
@@ -274,6 +277,50 @@ export function usePdfReader(paneIndex) {
     await renderAllPages()
   }
 
+  // Wheel event handler reference for cleanup
+  let wheelHandler = null
+
+  // Setup wheel event handler for scroll mode
+  function setupWheelHandler() {
+    if (!containerRef.value) return
+
+    // Remove existing handler if any
+    if (wheelHandler) {
+      containerRef.value.removeEventListener('wheel', wheelHandler)
+    }
+
+    wheelHandler = (e) => {
+      const settings = settingsStore.paneSettings[paneIndex]
+
+      if (settings.epubScrollMode === 'page') {
+        // Page mode: scroll by page on wheel
+        e.preventDefault()
+
+        // Debounce to prevent too rapid page changes
+        if (wheelHandler.lastTime && Date.now() - wheelHandler.lastTime < 300) {
+          return
+        }
+        wheelHandler.lastTime = Date.now()
+
+        if (e.deltaY > 0) {
+          next()
+        } else if (e.deltaY < 0) {
+          prev()
+        }
+      } else {
+        // Continuous mode: apply speed adjustment
+        if (settings.epubScrollSpeed !== 1.0) {
+          e.preventDefault()
+          const scrollAmount = e.deltaY * settings.epubScrollSpeed
+          containerRef.value.scrollTop += scrollAmount
+        }
+        // If speed is 1.0, let default scroll behavior happen
+      }
+    }
+
+    containerRef.value.addEventListener('wheel', wheelHandler, { passive: false })
+  }
+
   // Get scroll info for sync
   function getScrollInfo() {
     if (!containerRef.value) return null
@@ -296,6 +343,12 @@ export function usePdfReader(paneIndex) {
 
   // Cleanup
   function cleanup() {
+    // Remove wheel handler
+    if (wheelHandler && containerRef.value) {
+      containerRef.value.removeEventListener('wheel', wheelHandler)
+      wheelHandler = null
+    }
+
     if (pdf.value) {
       pdf.value.destroy()
       pdf.value = null

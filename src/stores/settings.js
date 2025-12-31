@@ -22,6 +22,10 @@ const defaultPaneSettings = () => ({
   // Display settings
   columnCount: 1,
   scrollMode: 'vertical',
+
+  // EPUB scroll settings
+  epubScrollMode: 'page', // 'page' | 'continuous'
+  epubScrollSpeed: 1.0,   // Scroll speed multiplier for continuous mode (0.5 - 3.0)
 })
 
 export const useSettingsStore = defineStore('settings', () => {
