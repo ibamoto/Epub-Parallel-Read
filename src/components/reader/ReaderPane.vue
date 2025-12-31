@@ -69,8 +69,8 @@
       <button @click="handlePrev">← 前へ</button>
       <button @click="handleNext">次へ →</button>
 
-      <!-- Scroll Controls -->
-      <div class="scroll-controls">
+      <!-- Scroll Controls (PDF only - EPUB only supports pagination) -->
+      <div v-if="readerStore.fileTypes[paneIndex] === 'pdf'" class="scroll-controls">
         <div class="scroll-mode-toggle">
           <button
             :class="{ active: paneSettings.epubScrollMode === 'page' }"

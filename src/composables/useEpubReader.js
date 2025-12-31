@@ -208,45 +208,26 @@ export function useEpubReader(paneIndex) {
         injectContentStyles()
       })
 
-      // Handle wheel events based on scroll mode setting
-      // foliate-view captures wheel events internally, so we use capture phase
+      // Handle wheel events for page navigation
+      // Note: foliate-js does not support continuous scrolling, only pagination
       let wheelDebounce = null
       const wheelHandler = (e) => {
-        const settings = settingsStore.paneSettings[paneIndex]
-
         e.preventDefault()
         e.stopPropagation()
 
-        if (settings.epubScrollMode === 'continuous') {
-          // Continuous scroll mode: manually control scrolling with speed adjustment
-          const scrollAmount = e.deltaY * settings.epubScrollSpeed
-          if (view.value?.renderer) {
-            // Use foliate-js scroll method if available, otherwise use goToFraction
-            if (typeof view.value.renderer.scrollBy === 'function') {
-              view.value.renderer.scrollBy(scrollAmount)
-            } else {
-              // Fallback: calculate new fraction based on scroll delta
-              const currentFraction = view.value.renderer.fraction ?? 0
-              const scrollStep = 0.02 * settings.epubScrollSpeed * Math.sign(e.deltaY)
-              const newFraction = Math.max(0, Math.min(1, currentFraction + scrollStep))
-              view.value.goToFraction(newFraction)
-            }
-          }
-        } else {
-          // Page mode: navigate by page on wheel with debounce
-          if (wheelDebounce) return
-          wheelDebounce = setTimeout(() => {
-            wheelDebounce = null
-          }, 300)
+        // Debounce to prevent too rapid page changes
+        if (wheelDebounce) return
+        wheelDebounce = setTimeout(() => {
+          wheelDebounce = null
+        }, 250)
 
-          if (e.deltaY > 0) {
-            next()
-          } else if (e.deltaY < 0) {
-            prev()
-          }
+        if (e.deltaY > 0) {
+          next()
+        } else if (e.deltaY < 0) {
+          prev()
         }
 
-        // Dispatch a custom event for scroll sync regardless of mode
+        // Dispatch a custom event for scroll sync
         containerRef.value?.dispatchEvent(new CustomEvent('epub-wheel', {
           bubbles: true,
           detail: { deltaY: e.deltaY, deltaX: e.deltaX }
