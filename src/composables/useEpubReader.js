@@ -208,16 +208,38 @@ export function useEpubReader(paneIndex) {
         injectContentStyles()
       })
 
-      // Handle wheel events to enable scroll sync
-      // foliate-view captures wheel events internally, so we need to dispatch
-      // a custom event to notify parent components for scroll synchronization
+      // Handle wheel events based on scroll mode setting
+      // foliate-view captures wheel events internally, so we need custom handling
       wrapper.addEventListener('wheel', (e) => {
-        // Dispatch a custom event that ReaderPane can listen to
+        const settings = settingsStore.paneSettings[paneIndex]
+
+        if (settings.epubScrollMode === 'continuous') {
+          // Continuous scroll mode: manually control scrolling with speed adjustment
+          e.preventDefault()
+          e.stopPropagation()
+
+          const scrollAmount = e.deltaY * settings.epubScrollSpeed
+          if (view.value?.renderer) {
+            // Use foliate-js scroll method if available, otherwise use goToFraction
+            if (typeof view.value.renderer.scrollBy === 'function') {
+              view.value.renderer.scrollBy(scrollAmount)
+            } else {
+              // Fallback: calculate new fraction based on scroll delta
+              const currentFraction = view.value.renderer.fraction ?? 0
+              const scrollStep = 0.02 * settings.epubScrollSpeed * Math.sign(e.deltaY)
+              const newFraction = Math.max(0, Math.min(1, currentFraction + scrollStep))
+              view.value.goToFraction(newFraction)
+            }
+          }
+        }
+        // For 'page' mode, let foliate-js handle it naturally
+
+        // Dispatch a custom event for scroll sync regardless of mode
         containerRef.value?.dispatchEvent(new CustomEvent('epub-wheel', {
           bubbles: true,
           detail: { deltaY: e.deltaY, deltaX: e.deltaX }
         }))
-      }, { passive: true })
+      }, { passive: false })
 
       // Initialize view
       await foliateView.init({ showTextStart: true })

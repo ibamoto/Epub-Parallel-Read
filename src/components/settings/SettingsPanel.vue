@@ -173,6 +173,38 @@
             </div>
           </section>
 
+          <!-- EPUB Scroll Section -->
+          <section class="settings-section">
+            <h4>EPUBスクロール</h4>
+
+            <div class="setting-item">
+              <label>モード</label>
+              <div class="btn-group">
+                <button
+                  v-for="mode in scrollModeOptions"
+                  :key="mode.value"
+                  :class="{ active: localSettings.epubScrollMode === mode.value }"
+                  @click="localSettings.epubScrollMode = mode.value; updateSetting('epubScrollMode')"
+                >
+                  {{ mode.label }}
+                </button>
+              </div>
+            </div>
+
+            <div v-if="localSettings.epubScrollMode === 'continuous'" class="setting-item">
+              <label>速度</label>
+              <input
+                type="range"
+                v-model.number="localSettings.epubScrollSpeed"
+                min="0.5"
+                max="3"
+                step="0.1"
+                @input="updateSetting('epubScrollSpeed')"
+              />
+              <span class="value">{{ localSettings.epubScrollSpeed.toFixed(1) }}x</span>
+            </div>
+          </section>
+
           <!-- Actions -->
           <div class="settings-actions">
             <button class="reset-btn" @click="resetSettings">
@@ -214,6 +246,11 @@ const themeOptions = [
   { value: 'light', label: 'ライト', bg: '#ffffff', text: '#333333' },
   { value: 'dark', label: 'ダーク', bg: '#1a1a1a', text: '#e0e0e0' },
   { value: 'sepia', label: 'セピア', bg: '#f4ecd8', text: '#5c4b37' },
+]
+
+const scrollModeOptions = [
+  { value: 'page', label: 'ページ' },
+  { value: 'continuous', label: '連続' },
 ]
 
 // Local copy of settings for responsive updates
