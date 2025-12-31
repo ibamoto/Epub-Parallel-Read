@@ -2,7 +2,7 @@ const { app, BrowserWindow, ipcMain } = require('electron')
 const path = require('path')
 
 function createWindow() {
-  const preloadPath = path.join(__dirname, 'preload.js')
+  const preloadPath = path.join(__dirname, 'preload.cjs')
 
   const win = new BrowserWindow({
     width: 1400,

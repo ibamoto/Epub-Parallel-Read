@@ -11,7 +11,7 @@ export default defineConfig({
         entry: 'src-electron/main.cjs',
       },
       preload: {
-        input: 'src-electron/preload.js',
+        input: 'src-electron/preload.cjs',
       },
     }),
   ],
