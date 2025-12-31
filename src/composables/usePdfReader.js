@@ -20,6 +20,11 @@ export function usePdfReader(paneIndex) {
   const isReady = ref(false)
   const renderedPages = ref(new Map())
 
+  // For lazy loading
+  let intersectionObserver = null
+  let pageHeights = new Map() // Cache page heights for placeholders
+  const BUFFER_PAGES = 2 // Render current page ± this many pages
+
   // Create canvas for a page
   function createPageCanvas(pageNum) {
     const canvas = document.createElement('canvas')
@@ -64,37 +69,107 @@ export function usePdfReader(paneIndex) {
     }
   }
 
-  // Render all pages
-  async function renderAllPages() {
-    console.log('[PDF] renderAllPages called')
-    console.log('[PDF] pdf.value:', !!pdf.value)
-    console.log('[PDF] containerRef.value:', !!containerRef.value)
+  // Get page dimensions (cached)
+  async function getPageDimensions(pageNum) {
+    if (pageHeights.has(pageNum)) {
+      return pageHeights.get(pageNum)
+    }
+    const page = await pdf.value.getPage(pageNum)
+    const viewport = page.getViewport({ scale: scale.value })
+    const dimensions = { width: viewport.width, height: viewport.height }
+    pageHeights.set(pageNum, dimensions)
+    return dimensions
+  }
 
+  // Create placeholder canvases for all pages (without rendering)
+  async function createPagePlaceholders() {
+    console.log('[PDF] createPagePlaceholders called')
     if (!pdf.value || !containerRef.value) {
-      console.log('[PDF] renderAllPages aborted - missing pdf or container')
+      console.log('[PDF] createPagePlaceholders aborted - missing pdf or container')
       return
     }
 
     const container = containerRef.value
     container.innerHTML = ''
+    renderedPages.value.clear()
 
     const fragment = document.createDocumentFragment()
+    console.log('[PDF] Creating', totalPages.value, 'placeholder canvas elements')
 
-    console.log('[PDF] Creating', totalPages.value, 'canvas elements')
+    // Get first page dimensions to estimate others (faster than getting all)
+    const firstPageDims = await getPageDimensions(1)
+
     for (let i = 1; i <= totalPages.value; i++) {
       const canvas = createPageCanvas(i)
+      // Set placeholder size (use first page dimensions as estimate)
+      canvas.width = firstPageDims.width
+      canvas.height = firstPageDims.height
+      canvas.style.width = '100%'
+      canvas.style.height = 'auto'
+      canvas.style.display = 'block'
+      canvas.style.marginBottom = '10px'
+      // Add loading indicator style
+      canvas.style.backgroundColor = '#f0f0f0'
       fragment.appendChild(canvas)
     }
 
     container.appendChild(fragment)
+    console.log('[PDF] Placeholders created')
+  }
 
-    // Render pages
-    const canvases = container.querySelectorAll('canvas')
-    console.log('[PDF] Rendering', canvases.length, 'pages')
-    for (let i = 0; i < canvases.length; i++) {
-      await renderPage(i + 1, canvases[i])
+  // Setup IntersectionObserver for lazy loading
+  function setupIntersectionObserver() {
+    if (intersectionObserver) {
+      intersectionObserver.disconnect()
     }
-    console.log('[PDF] All pages rendered')
+
+    if (!containerRef.value) return
+
+    const options = {
+      root: containerRef.value,
+      rootMargin: '200px 0px', // Pre-load pages 200px before they become visible
+      threshold: 0
+    }
+
+    intersectionObserver = new IntersectionObserver((entries) => {
+      for (const entry of entries) {
+        if (entry.isIntersecting) {
+          const pageNum = parseInt(entry.target.dataset.page, 10)
+          renderPageWithBuffer(pageNum)
+        }
+      }
+    }, options)
+
+    // Observe all canvas elements
+    const canvases = containerRef.value.querySelectorAll('canvas')
+    canvases.forEach(canvas => intersectionObserver.observe(canvas))
+    console.log('[PDF] IntersectionObserver setup for', canvases.length, 'pages')
+  }
+
+  // Render a page and its buffer pages
+  async function renderPageWithBuffer(centerPage) {
+    const startPage = Math.max(1, centerPage - BUFFER_PAGES)
+    const endPage = Math.min(totalPages.value, centerPage + BUFFER_PAGES)
+
+    const container = containerRef.value
+    if (!container) return
+
+    for (let pageNum = startPage; pageNum <= endPage; pageNum++) {
+      // Skip already rendered pages
+      if (renderedPages.value.get(pageNum)) continue
+
+      const canvas = container.querySelector(`canvas[data-page="${pageNum}"]`)
+      if (canvas) {
+        await renderPage(pageNum, canvas)
+      }
+    }
+  }
+
+  // Render initial visible pages (first page + buffer)
+  async function renderInitialPages() {
+    console.log('[PDF] Rendering initial pages...')
+    await renderPageWithBuffer(1)
+    console.log('[PDF] Initial pages rendered')
   }
 
   // Generate TOC from PDF outline
@@ -190,8 +265,14 @@ export function usePdfReader(paneIndex) {
       const toc = await generateToc()
       readerStore.setToc(paneIndex, toc)
 
-      // Render all pages
-      await renderAllPages()
+      // Create placeholders for all pages (fast)
+      await createPagePlaceholders()
+
+      // Setup lazy loading observer
+      setupIntersectionObserver()
+
+      // Render only initial visible pages (fast)
+      await renderInitialPages()
 
       // Restore saved position
       const savedPage = readerStore.currentPages[paneIndex]
@@ -219,6 +300,8 @@ export function usePdfReader(paneIndex) {
 
     const canvas = containerRef.value.querySelector(`canvas[data-page="${pageNum}"]`)
     if (canvas) {
+      // Ensure the target page and surrounding pages are rendered
+      renderPageWithBuffer(pageNum)
       canvas.scrollIntoView({ behavior: 'smooth', block: 'start' })
       currentPage.value = pageNum
       readerStore.setCurrentPage(paneIndex, pageNum)
@@ -271,10 +354,19 @@ export function usePdfReader(paneIndex) {
     }
   }
 
-  // Set scale and re-render
+  // Set scale and re-render visible pages
   async function setScale(newScale) {
     scale.value = newScale
-    await renderAllPages()
+    // Clear cached page heights (they depend on scale)
+    pageHeights.clear()
+    // Clear rendered pages to force re-render
+    renderedPages.value.clear()
+    // Recreate placeholders with new scale
+    await createPagePlaceholders()
+    // Re-setup observer
+    setupIntersectionObserver()
+    // Re-render current visible pages
+    await renderPageWithBuffer(currentPage.value)
   }
 
   // Wheel event handler reference for cleanup
@@ -343,6 +435,12 @@ export function usePdfReader(paneIndex) {
 
   // Cleanup
   function cleanup() {
+    // Remove IntersectionObserver
+    if (intersectionObserver) {
+      intersectionObserver.disconnect()
+      intersectionObserver = null
+    }
+
     // Remove wheel handler
     if (wheelHandler && containerRef.value) {
       containerRef.value.removeEventListener('wheel', wheelHandler)
@@ -354,6 +452,7 @@ export function usePdfReader(paneIndex) {
       pdf.value = null
     }
     renderedPages.value.clear()
+    pageHeights.clear()
     totalPages.value = 0
     currentPage.value = 1
     isReady.value = false
