@@ -1,46 +1,57 @@
-const { app, BrowserWindow } = require("electron");
-const path = require("path");
+const { app, BrowserWindow, ipcMain } = require('electron')
+const path = require('path')
 
 function createWindow() {
-  const preloadPath = path.join(__dirname, "preload.js");
-  console.log("Preload script path:", preloadPath); // デバッグ用
+  const preloadPath = path.join(__dirname, 'preload.js')
 
   const win = new BrowserWindow({
-    width: 1200,
-    height: 800,
+    width: 1400,
+    height: 900,
+    minWidth: 800,
+    minHeight: 600,
     webPreferences: {
       preload: preloadPath,
       nodeIntegration: false,
       contextIsolation: true,
-      sandbox: false, // preloadスクリプトの読み込みを確実にするため
+      sandbox: false,
     },
-  });
+    titleBarStyle: 'hiddenInset',
+    trafficLightPosition: { x: 15, y: 15 },
+  })
 
-  // ドラッグアンドドロップを有効化
-  win.webContents.on("will-navigate", (event) => {
-    event.preventDefault();
-  });
+  // Prevent navigation
+  win.webContents.on('will-navigate', (event) => {
+    event.preventDefault()
+  })
 
-  if (process.env.NODE_ENV === "development") {
-    win.loadURL("http://localhost:5173");
-    win.webContents.openDevTools();
+  // Development mode
+  if (process.env.NODE_ENV === 'development' || process.env.VITE_DEV_SERVER_URL) {
+    win.loadURL(process.env.VITE_DEV_SERVER_URL || 'http://localhost:5173')
+    win.webContents.openDevTools()
   } else {
-    win.loadFile(path.join(__dirname, "../dist/index.html"));
+    win.loadFile(path.join(__dirname, '../dist/index.html'))
   }
 }
 
 app.whenReady().then(() => {
-  createWindow();
+  createWindow()
 
-  app.on("activate", () => {
+  app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) {
-      createWindow();
+      createWindow()
     }
-  });
-});
+  })
+})
 
-app.on("window-all-closed", () => {
-  if (process.platform !== "darwin") {
-    app.quit();
+app.on('window-all-closed', () => {
+  if (process.platform !== 'darwin') {
+    app.quit()
   }
-});
+})
+
+// Security: Prevent new window creation
+app.on('web-contents-created', (event, contents) => {
+  contents.setWindowOpenHandler(() => {
+    return { action: 'deny' }
+  })
+})

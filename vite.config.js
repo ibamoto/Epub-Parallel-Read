@@ -1,22 +1,43 @@
-import { defineConfig } from "vite";
-import vue from "@vitejs/plugin-vue";
-import path from "path";
+import { defineConfig } from 'vite'
+import vue from '@vitejs/plugin-vue'
+import path from 'path'
+import electron from 'vite-plugin-electron/simple'
 
 export default defineConfig({
-  plugins: [vue()],
-  base: "./",
+  plugins: [
+    vue(),
+    electron({
+      main: {
+        entry: 'src-electron/main.js',
+      },
+      preload: {
+        input: 'src-electron/preload.js',
+      },
+    }),
+  ],
+  base: './',
   build: {
-    outDir: "dist",
-    assetsDir: "assets",
+    outDir: 'dist',
+    assetsDir: 'assets',
     emptyOutDir: true,
+    rollupOptions: {
+      output: {
+        manualChunks: {
+          'pdfjs': ['pdfjs-dist'],
+        },
+      },
+    },
   },
   resolve: {
     alias: {
-      "@": path.resolve(__dirname, "./src"),
+      '@': path.resolve(__dirname, './src'),
     },
   },
   server: {
     port: 5173,
     strictPort: true,
   },
-});
+  optimizeDeps: {
+    include: ['pdfjs-dist'],
+  },
+})
