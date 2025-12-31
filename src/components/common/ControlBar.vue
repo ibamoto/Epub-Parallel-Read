@@ -10,13 +10,16 @@
     </button>
 
     <div class="file-inputs">
+      <!-- Hidden file inputs -->
+      <input type="file" ref="leftFileInput" @change="handleFileChange(0, $event)" :accept="acceptTypes" class="hidden-input" />
+      <input type="file" ref="rightFileInput" @change="handleFileChange(1, $event)" :accept="acceptTypes" class="hidden-input" />
+
       <!-- Left Pane Button with History -->
       <div class="file-button-wrapper" ref="leftButtonWrapper">
-        <label class="file-input-label" @click.prevent="toggleDropdown(0)">
-          <input type="file" ref="leftFileInput" @change="handleFileChange(0, $event)" :accept="acceptTypes" />
+        <button class="file-input-label" @click="toggleDropdown(0)">
           <span>左ペイン</span>
           <span class="dropdown-arrow">▼</span>
-        </label>
+        </button>
         <div v-if="showDropdown[0]" class="history-dropdown">
           <div class="dropdown-header">
             <span>履歴</span>
@@ -47,11 +50,10 @@
 
       <!-- Right Pane Button with History -->
       <div class="file-button-wrapper right-pane" ref="rightButtonWrapper">
-        <label class="file-input-label" @click.prevent="toggleDropdown(1)">
-          <input type="file" ref="rightFileInput" @change="handleFileChange(1, $event)" :accept="acceptTypes" />
+        <button class="file-input-label" @click="toggleDropdown(1)">
           <span>右ペイン</span>
           <span class="dropdown-arrow">▼</span>
-        </label>
+        </button>
         <div v-if="showDropdown[1]" class="history-dropdown">
           <div class="dropdown-header">
             <span>履歴</span>
@@ -283,8 +285,16 @@ async function deleteHistoryItem(id) {
   background: var(--bg-hover);
 }
 
-.file-input-label input {
-  display: none;
+.hidden-input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
 }
 
 .dropdown-arrow {
