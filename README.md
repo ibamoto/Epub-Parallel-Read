@@ -1,43 +1,46 @@
-# ※注
-素人がCursor頼りで作っている ＋ epub.jsが古いなので、少々無茶な作り。
-consoleではエラー出てたりしますが、使えるのでリリース。
-vivostyleやreadiumなんかも試したけどやはりepub.jsだなとなりつつ、
-古いので、周辺コンポーネントのバージョン上げづらくいろいろ無茶が。
-epub.jsがアップデートされないと改善は厳しそう。
+# Parallel Read
 
+EPUB / PDF ファイルを2画面で同時に読むことができるデスクトップアプリケーションです。
 
+## v2.0 の新機能
 
-
-# Parallel EPUB Reader
-
-EPUB ファイルを 2 画面で同時に読むことができるデスクトップアプリケーションです。
+- **PDF サポート復活**: EPUB に加え、PDF ファイルも表示可能に
+- **モダンなアーキテクチャ**: Pinia による状態管理、コンポーネント分離
+- **拡張された設定機能**:
+  - フォントファミリー（システム、Google Fonts 対応）
+  - フォントサイズ・太さ
+  - 行間・字間・段落間隔
+  - 個別の余白設定（上下左右）
+  - テキスト配置
+- **テーマ機能**: ライト / ダーク / セピア
+- **UI改善**: よりモダンなデザイン
 
 ## 機能
 
-- 2 画面での同時表示
+- 2画面での同時表示（EPUB / PDF）
 - スクロール同期機能
-- ダークモード対応
+- ダークモード・セピアモード対応
 - 目次表示/非表示
-- フォントサイズ・行間・余白のカスタマイズ
+- 豊富なカスタマイズオプション
 - 画面分割比率の調整
+- ドラッグ＆ドロップ対応
 - キーボードショートカット対応
 
 ## インストール方法
 
 ### リリースからインストール
 
-1. [Releases](https://github.com/ibamoto/c-epub/releases) ページから最新のバージョンをダウンロード
+1. [Releases](https://github.com/ibamoto/Epub-Parallel-Read/releases) ページから最新のバージョンをダウンロード
 2. ダウンロードしたファイルを実行してインストール
    - macOS: `.dmg`ファイルを開き、アプリケーションを Applications フォルダにドラッグ＆ドロップ
    - Windows: `.exe`ファイルを実行してインストール
-   - Linux: `.AppImage`ファイルを実行
 
 ### ソースからビルド
 
 ```bash
 # リポジトリのクローン
-git clone https://github.com/ibamoto/c-epub.git
-cd c-epub
+git clone https://github.com/ibamoto/Epub-Parallel-Read.git
+cd Epub-Parallel-Read
 
 # 依存関係のインストール
 npm install
@@ -52,20 +55,45 @@ npm run electron:build
 ## 使用方法
 
 1. アプリケーションを起動
-2. 左右の「ファイルを選択」ボタンから EPUB ファイルを選択
+2. 左右のペインにEPUB/PDFファイルをドラッグ＆ドロップ、または上部のボタンから選択
 3. 必要に応じて以下の機能を使用:
-   - スクロール同期の切り替え: ⌘Y
-   - コントロールパネルの表示/非表示: ⌘H
+   - スクロール同期の切り替え: 上部の「スクロール同期」ボタン
+   - コントロールパネルの表示/非表示: Ctrl/⌘ + H
    - ページ移動（同期モード時）: ← →
-   - 目次の表示/非表示: 各画面の目次ボタンをクリック
+   - 表示設定: 各ペインの「Aa」ボタン
+   - 目次の表示/非表示: サイドバーのトグルボタン
    - 画面分割比率の調整: 中央のバーをドラッグ
 
-## 開発環境
+## 技術スタック
 
-- Node.js
-- Vue 3
-- Electron
-- EPUBjs
+- **フロントエンド**: Vue 3 + Pinia
+- **デスクトップ**: Electron
+- **EPUB レンダリング**: epub.js
+- **PDF レンダリング**: PDF.js
+- **ビルドツール**: Vite + electron-builder
+
+## プロジェクト構成
+
+```
+src/
+├── App.vue                    # メインアプリケーション
+├── components/
+│   ├── common/
+│   │   └── ControlBar.vue     # 上部コントロールバー
+│   ├── navigation/
+│   │   └── TableOfContents.vue # 目次サイドバー
+│   ├── reader/
+│   │   └── ReaderPane.vue     # リーダーペイン
+│   └── settings/
+│       └── SettingsPanel.vue  # 設定パネル
+├── composables/
+│   ├── useEpubReader.js       # EPUB リーダーロジック
+│   ├── usePdfReader.js        # PDF リーダーロジック
+│   └── useReaderSync.js       # 同期ロジック
+└── stores/
+    ├── reader.js              # リーダー状態管理
+    └── settings.js            # 設定状態管理
+```
 
 ## ライセンス
 
