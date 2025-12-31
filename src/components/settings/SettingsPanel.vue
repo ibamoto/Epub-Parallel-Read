@@ -173,9 +173,9 @@
             </div>
           </section>
 
-          <!-- EPUB Scroll Section -->
+          <!-- Scroll Section -->
           <section class="settings-section">
-            <h4>EPUBスクロール</h4>
+            <h4>スクロール</h4>
 
             <div class="setting-item">
               <label>モード</label>
