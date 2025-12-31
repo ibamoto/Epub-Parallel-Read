@@ -1,13 +1,11 @@
 import { ref, onUnmounted } from 'vue'
 import * as pdfjsLib from 'pdfjs-dist'
+import pdfWorkerUrl from 'pdfjs-dist/build/pdf.worker.min.mjs?url'
 import { useReaderStore } from '../stores/reader'
 import { useSettingsStore } from '../stores/settings'
 
-// Set worker path
-pdfjsLib.GlobalWorkerOptions.workerSrc = new URL(
-  'pdfjs-dist/build/pdf.worker.min.mjs',
-  import.meta.url
-).href
+// Set worker path using Vite's ?url suffix for reliable resolution
+pdfjsLib.GlobalWorkerOptions.workerSrc = pdfWorkerUrl
 
 export function usePdfReader(paneIndex) {
   const readerStore = useReaderStore()
