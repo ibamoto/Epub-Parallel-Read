@@ -93,8 +93,8 @@ async function handleFileSelect(paneIndex, event) {
   try {
     const reader = paneIndex === 0 ? reader1.value : reader2.value
     await reader?.openFile(file)
-    // Add to history after successful open
-    await addToHistory(file)
+    // Add to history after successful open (with pane index)
+    await addToHistory(file, paneIndex)
   } catch (error) {
     console.error('Error opening file:', error)
     globalError.value = `ファイルを開けませんでした: ${error.message}`
@@ -108,8 +108,8 @@ async function handleHistorySelect(paneIndex, file) {
   try {
     const reader = paneIndex === 0 ? reader1.value : reader2.value
     await reader?.openFile(file)
-    // Update history timestamp
-    await addToHistory(file)
+    // Update history timestamp (with pane index)
+    await addToHistory(file, paneIndex)
   } catch (error) {
     console.error('Error opening file from history:', error)
     globalError.value = `ファイルを開けませんでした: ${error.message}`

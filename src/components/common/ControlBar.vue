@@ -25,12 +25,12 @@
             <span>履歴</span>
             <button class="new-file-btn" @click.stop="triggerFileInput(0)">新規ファイル</button>
           </div>
-          <div v-if="history.length === 0" class="no-history">
+          <div v-if="leftHistory.length === 0" class="no-history">
             履歴がありません
           </div>
           <div v-else class="history-list">
             <div
-              v-for="item in history"
+              v-for="item in leftHistory"
               :key="item.id"
               class="history-item"
               @click.stop="selectFromHistory(0, item.id)"
@@ -59,12 +59,12 @@
             <span>履歴</span>
             <button class="new-file-btn" @click.stop="triggerFileInput(1)">新規ファイル</button>
           </div>
-          <div v-if="history.length === 0" class="no-history">
+          <div v-if="rightHistory.length === 0" class="no-history">
             履歴がありません
           </div>
           <div v-else class="history-list">
             <div
-              v-for="item in history"
+              v-for="item in rightHistory"
               :key="item.id"
               class="history-item"
               @click.stop="selectFromHistory(1, item.id)"
@@ -97,7 +97,7 @@ import { useSettingsStore } from '../../stores/settings'
 import { useFileHistory } from '../../composables/useFileHistory'
 
 const settingsStore = useSettingsStore()
-const { history, init, getFileById, deleteFromHistory, formatFileSize, formatDate } = useFileHistory()
+const { leftHistory, rightHistory, init, getFileById, deleteFromHistory, formatFileSize, formatDate } = useFileHistory()
 
 const appVersion = window.appVersion || '2.0.0'
 const acceptTypes = '.epub,.pdf'
