@@ -29,6 +29,7 @@ export function usePdfReader(paneIndex) {
   const scale = ref(1.5)
   const isReady = ref(false)
   const renderedPages = ref(new Map())
+  const renderingPages = new Set() // Track pages currently being rendered
 
   // For lazy loading
   let intersectionObserver = null
@@ -46,6 +47,15 @@ export function usePdfReader(paneIndex) {
   // Render a single page
   async function renderPage(pageNum, canvas) {
     if (!pdf.value) return
+
+    // Skip if already rendering this page
+    if (renderingPages.has(pageNum)) {
+      console.log(`[PDF] Page ${pageNum} is already being rendered, skipping`)
+      return
+    }
+
+    // Mark as rendering
+    renderingPages.add(pageNum)
 
     try {
       console.log(`[PDF] Rendering page ${pageNum}...`)
@@ -76,6 +86,9 @@ export function usePdfReader(paneIndex) {
       renderedPages.value.set(pageNum, true)
     } catch (error) {
       console.error(`[PDF] Error rendering page ${pageNum}:`, error)
+    } finally {
+      // Remove from rendering set
+      renderingPages.delete(pageNum)
     }
   }
 
@@ -314,47 +327,55 @@ export function usePdfReader(paneIndex) {
     const settings = settingsStore.paneSettings[paneIndex]
     const isPageMode = settings.epubScrollMode === 'page'
     const canvases = containerRef.value.querySelectorAll('canvas')
+    const container = containerRef.value
+
+    // Adjust container layout first
+    if (isPageMode) {
+      container.style.cssText = `
+        overflow: hidden;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        flex: 1;
+        min-height: 0;
+        background: var(--bg-primary);
+      `
+    } else {
+      container.style.cssText = `
+        overflow-y: auto;
+        display: block;
+        flex: 1;
+        min-height: 0;
+        background: var(--bg-primary);
+      `
+    }
 
     canvases.forEach((canvas) => {
       const pageNum = parseInt(canvas.dataset.page, 10)
       if (isPageMode) {
         // Page mode: show only current page, centered and fit to container
         if (pageNum === currentPage.value) {
-          canvas.style.display = 'block'
-          canvas.style.margin = 'auto'
-          canvas.style.marginBottom = '0'
-          canvas.style.maxHeight = '100%'
-          canvas.style.maxWidth = '100%'
-          canvas.style.width = 'auto'
-          canvas.style.height = 'auto'
-          canvas.style.objectFit = 'contain'
+          canvas.style.cssText = `
+            display: block;
+            max-height: 100%;
+            max-width: 100%;
+            width: auto;
+            height: auto;
+            object-fit: contain;
+          `
         } else {
           canvas.style.display = 'none'
         }
       } else {
         // Continuous mode: show all pages with margin
-        canvas.style.display = 'block'
-        canvas.style.margin = '0 auto 10px auto'
-        canvas.style.maxHeight = ''
-        canvas.style.maxWidth = ''
-        canvas.style.width = '100%'
-        canvas.style.height = 'auto'
-        canvas.style.objectFit = ''
+        canvas.style.cssText = `
+          display: block;
+          margin: 0 auto 10px auto;
+          width: 100%;
+          height: auto;
+        `
       }
     })
-
-    // Adjust container layout for page mode
-    if (isPageMode) {
-      containerRef.value.style.overflow = 'hidden'
-      containerRef.value.style.display = 'flex'
-      containerRef.value.style.alignItems = 'center'
-      containerRef.value.style.justifyContent = 'center'
-    } else {
-      containerRef.value.style.overflow = 'auto'
-      containerRef.value.style.display = 'block'
-      containerRef.value.style.alignItems = ''
-      containerRef.value.style.justifyContent = ''
-    }
   }
 
   // Go to specific page
@@ -524,6 +545,7 @@ export function usePdfReader(paneIndex) {
       pdf.value = null
     }
     renderedPages.value.clear()
+    renderingPages.clear()
     pageHeights.clear()
     totalPages.value = 0
     currentPage.value = 1
