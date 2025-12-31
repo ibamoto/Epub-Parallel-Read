@@ -380,11 +380,15 @@ onUnmounted(() => {
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
 }
 
-/* EPUB iframe styles */
-:deep(iframe) {
-  border: none;
-  width: 100%;
-  height: 100%;
+/* EPUB content styles (iframe-free direct DOM rendering) */
+:deep(.epub-content-0),
+:deep(.epub-content-1) {
+  min-height: 100%;
+}
+
+:deep(.epub-chapter) {
+  word-wrap: break-word;
+  overflow-wrap: break-word;
 }
 
 /* Scrollbar styles */
