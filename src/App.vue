@@ -7,7 +7,7 @@
     />
 
     <!-- Control Bar -->
-    <ControlBar @file-select="handleFileSelect" />
+    <ControlBar @file-select="handleFileSelect" @history-select="handleHistorySelect" />
 
     <!-- Reader Container -->
     <div class="reader-container">
@@ -47,11 +47,13 @@
 import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
 import { useSettingsStore } from './stores/settings'
 import { useReaderStore } from './stores/reader'
+import { useFileHistory } from './composables/useFileHistory'
 import ControlBar from './components/common/ControlBar.vue'
 import ReaderPane from './components/reader/ReaderPane.vue'
 
 const settingsStore = useSettingsStore()
 const readerStore = useReaderStore()
+const { addToHistory } = useFileHistory()
 
 const reader1 = ref(null)
 const reader2 = ref(null)
@@ -91,8 +93,25 @@ async function handleFileSelect(paneIndex, event) {
   try {
     const reader = paneIndex === 0 ? reader1.value : reader2.value
     await reader?.openFile(file)
+    // Add to history after successful open
+    await addToHistory(file)
   } catch (error) {
     console.error('Error opening file:', error)
+    globalError.value = `ファイルを開けませんでした: ${error.message}`
+  }
+}
+
+// Handle file selection from history
+async function handleHistorySelect(paneIndex, file) {
+  if (!file) return
+
+  try {
+    const reader = paneIndex === 0 ? reader1.value : reader2.value
+    await reader?.openFile(file)
+    // Update history timestamp
+    await addToHistory(file)
+  } catch (error) {
+    console.error('Error opening file from history:', error)
     globalError.value = `ファイルを開けませんでした: ${error.message}`
   }
 }

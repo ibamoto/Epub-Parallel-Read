@@ -10,14 +10,75 @@
     </button>
 
     <div class="file-inputs">
-      <label class="file-input-label">
-        <input type="file" @change="$emit('file-select', 0, $event)" :accept="acceptTypes" />
-        <span>左ペイン</span>
-      </label>
-      <label class="file-input-label right-pane">
-        <input type="file" @change="$emit('file-select', 1, $event)" :accept="acceptTypes" />
-        <span>右ペイン</span>
-      </label>
+      <!-- Left Pane Button with History -->
+      <div class="file-button-wrapper" ref="leftButtonWrapper">
+        <label class="file-input-label" @click.prevent="toggleDropdown(0)">
+          <input type="file" ref="leftFileInput" @change="handleFileChange(0, $event)" :accept="acceptTypes" />
+          <span>左ペイン</span>
+          <span class="dropdown-arrow">▼</span>
+        </label>
+        <div v-if="showDropdown[0]" class="history-dropdown">
+          <div class="dropdown-header">
+            <span>履歴</span>
+            <button class="new-file-btn" @click.stop="triggerFileInput(0)">新規ファイル</button>
+          </div>
+          <div v-if="history.length === 0" class="no-history">
+            履歴がありません
+          </div>
+          <div v-else class="history-list">
+            <div
+              v-for="item in history"
+              :key="item.id"
+              class="history-item"
+              @click.stop="selectFromHistory(0, item.id)"
+            >
+              <div class="history-item-icon">{{ item.fileType === 'pdf' ? '📄' : '📕' }}</div>
+              <div class="history-item-info">
+                <div class="history-item-name">{{ item.fileName }}</div>
+                <div class="history-item-meta">
+                  {{ formatFileSize(item.fileSize) }} · {{ formatDate(item.openedAt) }}
+                </div>
+              </div>
+              <button class="history-item-delete" @click.stop="deleteHistoryItem(item.id)" title="削除">×</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Right Pane Button with History -->
+      <div class="file-button-wrapper right-pane" ref="rightButtonWrapper">
+        <label class="file-input-label" @click.prevent="toggleDropdown(1)">
+          <input type="file" ref="rightFileInput" @change="handleFileChange(1, $event)" :accept="acceptTypes" />
+          <span>右ペイン</span>
+          <span class="dropdown-arrow">▼</span>
+        </label>
+        <div v-if="showDropdown[1]" class="history-dropdown">
+          <div class="dropdown-header">
+            <span>履歴</span>
+            <button class="new-file-btn" @click.stop="triggerFileInput(1)">新規ファイル</button>
+          </div>
+          <div v-if="history.length === 0" class="no-history">
+            履歴がありません
+          </div>
+          <div v-else class="history-list">
+            <div
+              v-for="item in history"
+              :key="item.id"
+              class="history-item"
+              @click.stop="selectFromHistory(1, item.id)"
+            >
+              <div class="history-item-icon">{{ item.fileType === 'pdf' ? '📄' : '📕' }}</div>
+              <div class="history-item-info">
+                <div class="history-item-name">{{ item.fileName }}</div>
+                <div class="history-item-meta">
+                  {{ formatFileSize(item.fileSize) }} · {{ formatDate(item.openedAt) }}
+                </div>
+              </div>
+              <button class="history-item-delete" @click.stop="deleteHistoryItem(item.id)" title="削除">×</button>
+            </div>
+          </div>
+        </div>
+      </div>
     </div>
 
     <div class="version">v{{ appVersion }}</div>
@@ -29,15 +90,88 @@
 </template>
 
 <script setup>
-import { computed } from 'vue'
+import { ref, onMounted, onUnmounted } from 'vue'
 import { useSettingsStore } from '../../stores/settings'
+import { useFileHistory } from '../../composables/useFileHistory'
 
 const settingsStore = useSettingsStore()
+const { history, init, getFileById, deleteFromHistory, formatFileSize, formatDate } = useFileHistory()
 
 const appVersion = window.appVersion || '2.0.0'
 const acceptTypes = '.epub,.pdf'
 
-defineEmits(['file-select'])
+const emit = defineEmits(['file-select', 'history-select'])
+
+const showDropdown = ref([false, false])
+const leftFileInput = ref(null)
+const rightFileInput = ref(null)
+const leftButtonWrapper = ref(null)
+const rightButtonWrapper = ref(null)
+
+// Initialize history on mount
+onMounted(async () => {
+  await init()
+  document.addEventListener('click', handleClickOutside)
+})
+
+onUnmounted(() => {
+  document.removeEventListener('click', handleClickOutside)
+})
+
+// Toggle dropdown
+function toggleDropdown(paneIndex) {
+  // Close other dropdown
+  showDropdown.value[1 - paneIndex] = false
+  // Toggle this dropdown
+  showDropdown.value[paneIndex] = !showDropdown.value[paneIndex]
+}
+
+// Close dropdowns when clicking outside
+function handleClickOutside(event) {
+  if (leftButtonWrapper.value && !leftButtonWrapper.value.contains(event.target)) {
+    showDropdown.value[0] = false
+  }
+  if (rightButtonWrapper.value && !rightButtonWrapper.value.contains(event.target)) {
+    showDropdown.value[1] = false
+  }
+}
+
+// Trigger file input
+function triggerFileInput(paneIndex) {
+  showDropdown.value[paneIndex] = false
+  if (paneIndex === 0) {
+    leftFileInput.value?.click()
+  } else {
+    rightFileInput.value?.click()
+  }
+}
+
+// Handle file change from input
+function handleFileChange(paneIndex, event) {
+  emit('file-select', paneIndex, event)
+}
+
+// Select file from history
+async function selectFromHistory(paneIndex, fileId) {
+  showDropdown.value[paneIndex] = false
+  try {
+    const file = await getFileById(fileId)
+    if (file) {
+      emit('history-select', paneIndex, file)
+    }
+  } catch (error) {
+    console.error('Failed to load file from history:', error)
+  }
+}
+
+// Delete history item
+async function deleteHistoryItem(id) {
+  try {
+    await deleteFromHistory(id)
+  } catch (error) {
+    console.error('Failed to delete history item:', error)
+  }
+}
 </script>
 
 <style scoped>
@@ -119,13 +253,18 @@ defineEmits(['file-select'])
   flex: 1;
 }
 
-.file-input-label.right-pane {
+.file-button-wrapper {
+  position: relative;
+}
+
+.file-button-wrapper.right-pane {
   margin-left: auto;
 }
 
 .file-input-label {
   display: flex;
   align-items: center;
+  gap: 0.25rem;
   padding: 0.4rem 0.75rem;
   border: 1px dashed var(--border-color);
   border-radius: 6px;
@@ -134,6 +273,7 @@ defineEmits(['file-select'])
   cursor: pointer;
   transition: all 0.2s;
   font-size: 0.85rem;
+  user-select: none;
 }
 
 .file-input-label:hover {
@@ -143,6 +283,132 @@ defineEmits(['file-select'])
 
 .file-input-label input {
   display: none;
+}
+
+.dropdown-arrow {
+  font-size: 0.6rem;
+  margin-left: 0.25rem;
+  opacity: 0.7;
+}
+
+.history-dropdown {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  margin-top: 4px;
+  min-width: 280px;
+  max-width: 350px;
+  background: var(--bg-primary);
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  z-index: 1000;
+  overflow: hidden;
+}
+
+.file-button-wrapper.right-pane .history-dropdown {
+  left: auto;
+  right: 0;
+}
+
+.dropdown-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0.5rem 0.75rem;
+  border-bottom: 1px solid var(--border-color);
+  background: var(--bg-secondary);
+  font-size: 0.8rem;
+  color: var(--text-secondary);
+}
+
+.new-file-btn {
+  padding: 0.25rem 0.5rem;
+  border: 1px solid var(--accent-color);
+  border-radius: 4px;
+  background: transparent;
+  color: var(--accent-color);
+  font-size: 0.75rem;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.new-file-btn:hover {
+  background: var(--accent-color);
+  color: white;
+}
+
+.no-history {
+  padding: 1rem;
+  text-align: center;
+  color: var(--text-tertiary);
+  font-size: 0.85rem;
+}
+
+.history-list {
+  max-height: 300px;
+  overflow-y: auto;
+}
+
+.history-item {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem 0.75rem;
+  cursor: pointer;
+  transition: background-color 0.15s;
+}
+
+.history-item:hover {
+  background: var(--bg-hover);
+}
+
+.history-item-icon {
+  font-size: 1.25rem;
+  flex-shrink: 0;
+}
+
+.history-item-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.history-item-name {
+  font-size: 0.85rem;
+  color: var(--text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.history-item-meta {
+  font-size: 0.7rem;
+  color: var(--text-tertiary);
+  margin-top: 2px;
+}
+
+.history-item-delete {
+  flex-shrink: 0;
+  width: 20px;
+  height: 20px;
+  border: none;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--text-tertiary);
+  cursor: pointer;
+  font-size: 1rem;
+  line-height: 1;
+  opacity: 0;
+  transition: all 0.15s;
+}
+
+.history-item:hover .history-item-delete {
+  opacity: 1;
+}
+
+.history-item-delete:hover {
+  background: rgba(220, 38, 38, 0.1);
+  color: #dc2626;
 }
 
 .version {
