@@ -1,7 +1,9 @@
 import { ref, onUnmounted } from 'vue'
-import Epub from 'epubjs'
 import { useReaderStore } from '../stores/reader'
 import { useSettingsStore } from '../stores/settings'
+
+// Import foliate-js modules
+import { View, makeBook } from 'foliate-js/view.js'
 
 export function useEpubReader(paneIndex) {
   const readerStore = useReaderStore()
@@ -9,16 +11,13 @@ export function useEpubReader(paneIndex) {
 
   const containerRef = ref(null)
   const book = ref(null)
+  const view = ref(null)
   const isReady = ref(false)
-
-  // Content state
-  const chapters = ref([])
-  const currentChapterIndex = ref(0)
-  const resourceUrls = ref({}) // Store blob URLs for images/resources
   const styleElement = ref(null)
 
   // Process TOC to flat structure
   function processToc(toc) {
+    if (!toc) return []
     const result = []
     const processItem = (item, level = 0) => {
       result.push({
@@ -34,7 +33,7 @@ export function useEpubReader(paneIndex) {
     return result
   }
 
-  // Generate scoped styles
+  // Generate scoped styles for foliate-view
   function generateScopedStyles() {
     const colors = settingsStore.getThemeColors()
     const settings = settingsStore.paneSettings[paneIndex]
@@ -43,292 +42,106 @@ export function useEpubReader(paneIndex) {
       : settings.fontFamily
 
     return `
-      .epub-content-${paneIndex} {
-        background: ${colors.background} !important;
-        color: ${colors.text} !important;
-        font-family: ${fontFamily};
-        font-size: ${settings.fontSize}px;
-        font-weight: ${settings.fontWeight};
-        line-height: ${settings.lineHeight};
-        letter-spacing: ${settings.letterSpacing}em;
-        text-align: ${settings.textAlign};
-        padding: ${settings.marginTop}px ${settings.marginRight}px ${settings.marginBottom}px ${settings.marginLeft}px;
-        box-sizing: border-box;
+      .foliate-container-${paneIndex} {
+        width: 100%;
+        height: 100%;
+        background: ${colors.background};
       }
 
-      .epub-content-${paneIndex} p,
-      .epub-content-${paneIndex} div {
-        color: ${colors.text} !important;
+      .foliate-container-${paneIndex} foliate-view {
+        width: 100%;
+        height: 100%;
+        --foliate-background: ${colors.background};
+        --foliate-color: ${colors.text};
+        --foliate-font-family: ${fontFamily};
+        --foliate-font-size: ${settings.fontSize}px;
+        --foliate-font-weight: ${settings.fontWeight};
+        --foliate-line-height: ${settings.lineHeight};
+        --foliate-letter-spacing: ${settings.letterSpacing}em;
+        --foliate-text-align: ${settings.textAlign};
+        --foliate-margin: ${settings.marginTop}px ${settings.marginRight}px ${settings.marginBottom}px ${settings.marginLeft}px;
       }
 
-      .epub-content-${paneIndex} a {
-        color: ${colors.link} !important;
+      .foliate-container-${paneIndex} foliate-view::part(container) {
+        background: ${colors.background};
       }
 
-      .epub-content-${paneIndex} h1,
-      .epub-content-${paneIndex} h2,
-      .epub-content-${paneIndex} h3,
-      .epub-content-${paneIndex} h4,
-      .epub-content-${paneIndex} h5,
-      .epub-content-${paneIndex} h6 {
-        color: ${colors.text} !important;
-        margin-top: 1.2em;
-        margin-bottom: 0.6em;
-      }
-
-      .epub-content-${paneIndex} p {
-        margin-top: ${settings.paragraphSpacing}em;
-        margin-bottom: ${settings.paragraphSpacing}em;
-      }
-
-      .epub-content-${paneIndex} img {
-        max-width: 100%;
-        height: auto;
-        display: block;
-        margin: 1em auto;
-      }
-
-      .epub-content-${paneIndex} .epub-chapter {
-        margin-bottom: 2em;
-        padding-bottom: 2em;
-        border-bottom: 1px solid ${colors.text}22;
-      }
-
-      .epub-content-${paneIndex} .epub-chapter:last-child {
-        border-bottom: none;
-      }
-
-      .epub-content-${paneIndex} svg {
-        max-width: 100%;
-        height: auto;
-      }
-
-      .epub-content-${paneIndex} table {
-        border-collapse: collapse;
-        margin: 1em 0;
-        max-width: 100%;
-        overflow-x: auto;
-        display: block;
-      }
-
-      .epub-content-${paneIndex} th,
-      .epub-content-${paneIndex} td {
-        border: 1px solid ${colors.text}44;
-        padding: 0.5em;
-      }
-
-      .epub-content-${paneIndex} pre,
-      .epub-content-${paneIndex} code {
-        background: ${colors.text}11;
-        padding: 0.2em 0.4em;
-        border-radius: 3px;
-        font-family: monospace;
-        overflow-x: auto;
-      }
-
-      .epub-content-${paneIndex} pre code {
-        padding: 0;
-        background: none;
-      }
-
-      .epub-content-${paneIndex} blockquote {
-        margin: 1em 0;
-        padding-left: 1em;
-        border-left: 3px solid ${colors.text}44;
-        font-style: italic;
+      .foliate-container-${paneIndex} foliate-view::part(filter) {
+        background: ${colors.background};
       }
     `
   }
 
-  // Apply theme and settings
+  // Update styles
+  function updateStyles() {
+    if (!styleElement.value) return
+    styleElement.value.textContent = generateScopedStyles()
+
+    // Also inject styles into the view if available
+    if (view.value?.renderer) {
+      injectContentStyles()
+    }
+  }
+
+  // Inject styles into content documents
+  function injectContentStyles() {
+    if (!view.value?.renderer?.getContents) return
+
+    const colors = settingsStore.getThemeColors()
+    const settings = settingsStore.paneSettings[paneIndex]
+    const fontFamily = settings.fontFamily === 'system-ui'
+      ? 'system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen, Ubuntu, Cantarell, "Open Sans", "Helvetica Neue", sans-serif'
+      : settings.fontFamily
+
+    const css = `
+      html, body {
+        background: ${colors.background} !important;
+        color: ${colors.text} !important;
+        font-family: ${fontFamily} !important;
+        font-size: ${settings.fontSize}px !important;
+        font-weight: ${settings.fontWeight} !important;
+        line-height: ${settings.lineHeight} !important;
+        letter-spacing: ${settings.letterSpacing}em !important;
+        text-align: ${settings.textAlign} !important;
+      }
+      a { color: ${colors.link} !important; }
+      p, div, span { color: ${colors.text} !important; }
+      h1, h2, h3, h4, h5, h6 { color: ${colors.text} !important; }
+      p {
+        margin-top: ${settings.paragraphSpacing}em !important;
+        margin-bottom: ${settings.paragraphSpacing}em !important;
+      }
+      img { max-width: 100%; height: auto; }
+    `
+
+    try {
+      const contents = view.value.renderer.getContents()
+      for (const { doc } of contents) {
+        if (!doc) continue
+
+        // Remove existing injected style
+        const existing = doc.getElementById('foliate-injected-style')
+        if (existing) existing.remove()
+
+        // Add new style
+        const style = doc.createElement('style')
+        style.id = 'foliate-injected-style'
+        style.textContent = css
+        doc.head.appendChild(style)
+      }
+    } catch (e) {
+      console.warn('Could not inject styles:', e)
+    }
+  }
+
+  // Apply theme
   function applyTheme() {
     updateStyles()
   }
 
+  // Apply settings
   function applySettings() {
     updateStyles()
-  }
-
-  // Update styles
-  function updateStyles() {
-    if (!styleElement.value || !containerRef.value) return
-    styleElement.value.textContent = generateScopedStyles()
-  }
-
-  // Load resource as blob URL
-  async function loadResource(path, book) {
-    try {
-      // Normalize path
-      const normalizedPath = path.replace(/^\.\//, '').replace(/^\//, '')
-
-      // Try to get resource from archive
-      const resource = book.archive.zip.files[normalizedPath] ||
-                      book.archive.zip.files['OEBPS/' + normalizedPath] ||
-                      book.archive.zip.files['OPS/' + normalizedPath]
-
-      if (resource) {
-        const blob = await resource.async('blob')
-        return URL.createObjectURL(blob)
-      }
-
-      // Try using epubjs resources
-      const url = await book.resources.get(normalizedPath)
-      if (url) return url
-
-      return null
-    } catch (error) {
-      console.warn('Failed to load resource:', path, error)
-      return null
-    }
-  }
-
-  // Process HTML content - replace resource URLs
-  async function processContent(html, basePath, book) {
-    const parser = new DOMParser()
-    const doc = parser.parseFromString(html, 'application/xhtml+xml')
-
-    // Handle parse errors by trying HTML parser
-    if (doc.querySelector('parsererror')) {
-      const htmlDoc = parser.parseFromString(html, 'text/html')
-      return processDocument(htmlDoc, basePath, book)
-    }
-
-    return processDocument(doc, basePath, book)
-  }
-
-  async function processDocument(doc, basePath, book) {
-    const baseDir = basePath.split('/').slice(0, -1).join('/')
-
-    // Process images
-    const images = doc.querySelectorAll('img')
-    for (const img of images) {
-      const src = img.getAttribute('src')
-      if (src && !src.startsWith('data:') && !src.startsWith('http')) {
-        const fullPath = resolveUrl(baseDir, src)
-        let blobUrl = resourceUrls.value[fullPath]
-
-        if (!blobUrl) {
-          blobUrl = await loadResource(fullPath, book)
-          if (blobUrl) {
-            resourceUrls.value[fullPath] = blobUrl
-          }
-        }
-
-        if (blobUrl) {
-          img.setAttribute('src', blobUrl)
-        }
-      }
-    }
-
-    // Process SVG images (xlink:href)
-    const svgImages = doc.querySelectorAll('image')
-    for (const img of svgImages) {
-      const href = img.getAttribute('xlink:href') || img.getAttribute('href')
-      if (href && !href.startsWith('data:') && !href.startsWith('http')) {
-        const fullPath = resolveUrl(baseDir, href)
-        let blobUrl = resourceUrls.value[fullPath]
-
-        if (!blobUrl) {
-          blobUrl = await loadResource(fullPath, book)
-          if (blobUrl) {
-            resourceUrls.value[fullPath] = blobUrl
-          }
-        }
-
-        if (blobUrl) {
-          img.setAttribute('xlink:href', blobUrl)
-          img.setAttribute('href', blobUrl)
-        }
-      }
-    }
-
-    // Remove scripts for security
-    const scripts = doc.querySelectorAll('script')
-    scripts.forEach(script => script.remove())
-
-    // Get body content or full document
-    const body = doc.body || doc.documentElement
-    return body.innerHTML
-  }
-
-  // Resolve relative URL
-  function resolveUrl(base, relative) {
-    if (relative.startsWith('/')) {
-      return relative.slice(1)
-    }
-
-    const baseParts = base.split('/')
-    const relativeParts = relative.split('/')
-
-    for (const part of relativeParts) {
-      if (part === '..') {
-        baseParts.pop()
-      } else if (part !== '.') {
-        baseParts.push(part)
-      }
-    }
-
-    return baseParts.join('/')
-  }
-
-  // Load all chapters
-  async function loadChapters(book) {
-    const loadedChapters = []
-    const spine = book.spine
-
-    for (let i = 0; i < spine.items.length; i++) {
-      const item = spine.items[i]
-      try {
-        // Get chapter content
-        const doc = await book.load(item.href)
-        const serializer = new XMLSerializer()
-        const html = serializer.serializeToString(doc)
-
-        // Process content (replace image URLs, etc.)
-        const processedHtml = await processContent(html, item.href, book)
-
-        loadedChapters.push({
-          href: item.href,
-          index: i,
-          content: processedHtml,
-          idref: item.idref
-        })
-      } catch (error) {
-        console.warn(`Failed to load chapter ${i}:`, error)
-        loadedChapters.push({
-          href: item.href,
-          index: i,
-          content: `<p>Failed to load chapter: ${error.message}</p>`,
-          idref: item.idref
-        })
-      }
-    }
-
-    return loadedChapters
-  }
-
-  // Render chapters to container
-  function renderChapters() {
-    if (!containerRef.value) return
-
-    const container = containerRef.value
-    container.innerHTML = ''
-
-    // Create content wrapper
-    const wrapper = document.createElement('div')
-    wrapper.className = `epub-content-${paneIndex}`
-
-    // Add chapters
-    for (const chapter of chapters.value) {
-      const chapterDiv = document.createElement('div')
-      chapterDiv.className = 'epub-chapter'
-      chapterDiv.dataset.href = chapter.href
-      chapterDiv.dataset.index = chapter.index
-      chapterDiv.innerHTML = chapter.content
-      wrapper.appendChild(chapterDiv)
-    }
-
-    container.appendChild(wrapper)
   }
 
   // Open EPUB file
@@ -341,39 +154,57 @@ export function useEpubReader(paneIndex) {
     readerStore.clearError(paneIndex)
 
     try {
-      // Cleanup previous book
+      // Cleanup previous
       cleanup()
 
-      // Read file as ArrayBuffer
-      const arrayBuffer = await file.arrayBuffer()
+      // Create style element
+      styleElement.value = document.createElement('style')
+      styleElement.value.id = `foliate-styles-${paneIndex}`
+      document.head.appendChild(styleElement.value)
+      updateStyles()
 
-      // Create new book (only for parsing, not rendering)
-      book.value = Epub(arrayBuffer)
-      await book.value.ready
+      // Create container wrapper
+      const wrapper = document.createElement('div')
+      wrapper.className = `foliate-container-${paneIndex}`
+      wrapper.style.width = '100%'
+      wrapper.style.height = '100%'
+      containerRef.value.appendChild(wrapper)
+
+      // Create foliate-view element
+      const foliateView = document.createElement('foliate-view')
+      wrapper.appendChild(foliateView)
+      view.value = foliateView
+
+      // Open the book
+      await foliateView.open(file)
+      book.value = foliateView.book
 
       // Get metadata
       console.log(`Book ${paneIndex} metadata:`, book.value.metadata)
 
       // Get TOC
-      const navigation = await book.value.navigation
-      const toc = processToc(navigation.toc)
+      const toc = processToc(book.value.toc)
       readerStore.setToc(paneIndex, toc)
 
-      // Create style element
-      styleElement.value = document.createElement('style')
-      styleElement.value.id = `epub-styles-${paneIndex}`
-      document.head.appendChild(styleElement.value)
-      updateStyles()
+      // Setup event listeners
+      foliateView.addEventListener('relocate', (e) => {
+        const { cfi } = e.detail
+        if (cfi) {
+          readerStore.setCurrentLocation(paneIndex, cfi)
+        }
+      })
 
-      // Load all chapters
-      chapters.value = await loadChapters(book.value)
+      foliateView.addEventListener('load', () => {
+        // Inject styles when content loads
+        injectContentStyles()
+      })
 
-      // Render chapters
-      renderChapters()
+      // Initialize view
+      await foliateView.init({ showTextStart: true })
 
       // Store references
       readerStore.setBook(paneIndex, book.value, 'epub')
-      readerStore.setRendition(paneIndex, null) // No rendition in iframe-free mode
+      readerStore.setRendition(paneIndex, view.value)
       readerStore.setFileName(paneIndex, file.name)
 
       isReady.value = true
@@ -389,76 +220,37 @@ export function useEpubReader(paneIndex) {
 
   // Navigate to specific location
   async function goTo(href) {
-    if (!containerRef.value || !href) return
-
+    if (!view.value) return
     try {
-      // Remove any fragment identifier for matching
-      const [targetHref, fragment] = href.split('#')
-
-      // Find the chapter element
-      const chapters = containerRef.value.querySelectorAll('.epub-chapter')
-
-      for (const chapter of chapters) {
-        const chapterHref = chapter.dataset.href
-
-        // Match by href (with or without path prefix)
-        if (chapterHref === targetHref ||
-            chapterHref.endsWith('/' + targetHref) ||
-            targetHref.endsWith('/' + chapterHref) ||
-            chapterHref.includes(targetHref) ||
-            targetHref.includes(chapterHref)) {
-
-          if (fragment) {
-            // Try to find element with matching id
-            const targetElement = chapter.querySelector(`#${fragment}`)
-            if (targetElement) {
-              targetElement.scrollIntoView({ behavior: 'smooth', block: 'start' })
-              return
-            }
-          }
-
-          // Scroll to chapter start
-          chapter.scrollIntoView({ behavior: 'smooth', block: 'start' })
-          return
-        }
-      }
-
-      // If no match found, try matching by fragment only
-      if (fragment) {
-        const targetElement = containerRef.value.querySelector(`#${fragment}`)
-        if (targetElement) {
-          targetElement.scrollIntoView({ behavior: 'smooth', block: 'start' })
-          return
-        }
-      }
-
-      console.warn('Could not find navigation target:', href)
+      await view.value.goTo(href)
     } catch (error) {
       console.error('Error navigating:', error)
     }
   }
 
-  // Navigate to next chapter
+  // Navigate to next page
   async function next() {
-    if (!containerRef.value) return
-
-    const container = containerRef.value
-    const scrollAmount = container.clientHeight * 0.9
-    container.scrollBy({ top: scrollAmount, behavior: 'smooth' })
+    if (!view.value) return
+    try {
+      await view.value.next()
+    } catch (error) {
+      console.error('Error navigating next:', error)
+    }
   }
 
-  // Navigate to previous chapter
+  // Navigate to previous page
   async function prev() {
-    if (!containerRef.value) return
-
-    const container = containerRef.value
-    const scrollAmount = container.clientHeight * 0.9
-    container.scrollBy({ top: -scrollAmount, behavior: 'smooth' })
+    if (!view.value) return
+    try {
+      await view.value.prev()
+    } catch (error) {
+      console.error('Error navigating prev:', error)
+    }
   }
 
-  // Resize handler (no-op in iframe-free mode, but kept for API compatibility)
+  // Resize (no-op for foliate-js, handles it automatically)
   function resize() {
-    // No action needed - CSS handles responsive layout
+    // foliate-js handles resize automatically
   }
 
   // Get scroll info for sync
@@ -475,23 +267,25 @@ export function useEpubReader(paneIndex) {
 
   // Set scroll position by ratio
   function setScrollByRatio(ratio) {
-    if (!containerRef.value) return
-    const el = containerRef.value
-    const maxScroll = el.scrollHeight - el.clientHeight
-    el.scrollTop = ratio * maxScroll
+    if (!view.value || !view.value.goToFraction) return
+    try {
+      view.value.goToFraction(ratio)
+    } catch (e) {
+      console.warn('Could not set scroll position:', e)
+    }
   }
 
   // Cleanup
   function cleanup() {
-    // Revoke all blob URLs
-    for (const url of Object.values(resourceUrls.value)) {
+    // Close view
+    if (view.value) {
       try {
-        URL.revokeObjectURL(url)
+        view.value.close()
       } catch (e) {
-        // Ignore errors
+        console.warn('Error closing view:', e)
       }
+      view.value = null
     }
-    resourceUrls.value = {}
 
     // Remove style element
     if (styleElement.value && styleElement.value.parentNode) {
@@ -504,17 +298,7 @@ export function useEpubReader(paneIndex) {
       containerRef.value.innerHTML = ''
     }
 
-    // Destroy book
-    if (book.value) {
-      try {
-        book.value.destroy()
-      } catch (e) {
-        console.warn('Error destroying book:', e)
-      }
-      book.value = null
-    }
-
-    chapters.value = []
+    book.value = null
     isReady.value = false
   }
 
