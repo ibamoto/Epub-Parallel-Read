@@ -1,77 +1,75 @@
 <template>
-  <div class="reader-wrapper" :class="position">
-    <!-- TOC Sidebar -->
-    <TableOfContents
-      v-if="position === 'left'"
-      :items="readerStore.tocs[paneIndex]"
-      :visible="readerStore.showToc[paneIndex]"
-      :position="position"
-      :currentLocation="readerStore.currentLocations[paneIndex]"
-      @toggle="readerStore.toggleToc(paneIndex)"
-      @navigate="handleNavigate"
-    />
+  <div class="reader-pane-container">
+    <div class="reader-wrapper" :class="position">
+      <!-- TOC Sidebar -->
+      <TableOfContents
+        v-if="position === 'left'"
+        :items="readerStore.tocs[paneIndex]"
+        :visible="readerStore.showToc[paneIndex]"
+        :position="position"
+        :currentLocation="readerStore.currentLocations[paneIndex]"
+        @toggle="readerStore.toggleToc(paneIndex)"
+        @navigate="handleNavigate"
+      />
 
-    <!-- Reader Content -->
-    <div
-      class="reader-content"
-      :class="{ dragover: isDragging }"
-      @dragenter.prevent="isDragging = true"
-      @dragleave.prevent="isDragging = false"
-      @dragover.prevent
-      @drop.prevent="handleDrop"
-    >
-      <!-- Loading State -->
-      <div v-if="readerStore.isLoading[paneIndex]" class="loading-state">
-        <div class="spinner"></div>
-        <span>読み込み中...</span>
-      </div>
-
-      <!-- Empty State -->
-      <div v-else-if="!hasContent" class="empty-state">
-        <div class="drop-icon">📚</div>
-        <p>ファイルをドラッグ＆ドロップ</p>
-        <p class="hint">または上のボタンから選択</p>
-        <p class="formats">対応形式: EPUB, PDF</p>
-      </div>
-
-      <!-- Reader View -->
+      <!-- Reader Content -->
       <div
-        v-show="hasContent && !readerStore.isLoading[paneIndex]"
-        ref="readerView"
-        class="reader-view"
-        @scroll="handleScroll"
-      ></div>
+        class="reader-content"
+        :class="{ dragover: isDragging }"
+        @dragenter.prevent="isDragging = true"
+        @dragleave.prevent="isDragging = false"
+        @dragover.prevent
+        @drop.prevent="handleDrop"
+      >
+        <!-- Loading State -->
+        <div v-if="readerStore.isLoading[paneIndex]" class="loading-state">
+          <div class="spinner"></div>
+          <span>読み込み中...</span>
+        </div>
 
-      <!-- Error Message -->
-      <div v-if="readerStore.errors[paneIndex]" class="error-message">
-        {{ readerStore.errors[paneIndex] }}
+        <!-- Empty State -->
+        <div v-else-if="!hasContent" class="empty-state">
+          <div class="drop-icon">📚</div>
+          <p>ファイルをドラッグ＆ドロップ</p>
+          <p class="hint">または上のボタンから選択</p>
+          <p class="formats">対応形式: EPUB, PDF</p>
+        </div>
+
+        <!-- Reader View -->
+        <div
+          v-show="hasContent && !readerStore.isLoading[paneIndex]"
+          ref="readerView"
+          class="reader-view"
+          @scroll="handleScroll"
+        ></div>
+
+        <!-- Error Message -->
+        <div v-if="readerStore.errors[paneIndex]" class="error-message">
+          {{ readerStore.errors[paneIndex] }}
+        </div>
       </div>
+
+      <!-- TOC Sidebar (Right) -->
+      <TableOfContents
+        v-if="position === 'right'"
+        :items="readerStore.tocs[paneIndex]"
+        :visible="readerStore.showToc[paneIndex]"
+        :position="position"
+        :currentLocation="readerStore.currentLocations[paneIndex]"
+        @toggle="readerStore.toggleToc(paneIndex)"
+        @navigate="handleNavigate"
+      />
     </div>
 
-    <!-- TOC Sidebar (Right) -->
-    <TableOfContents
-      v-if="position === 'right'"
-      :items="readerStore.tocs[paneIndex]"
-      :visible="readerStore.showToc[paneIndex]"
-      :position="position"
-      :currentLocation="readerStore.currentLocations[paneIndex]"
-      @toggle="readerStore.toggleToc(paneIndex)"
-      @navigate="handleNavigate"
-    />
-  </div>
-
-  <!-- Navigation Buttons -->
-  <div class="navigation-group" :class="position">
-    <button class="settings-btn" @click="showSettings = true">
-      <span>Aa</span>
-    </button>
-    <button @click="handlePrev">
-      ← 前へ
-    </button>
-    <button @click="handleNext">
-      次へ →
-    </button>
-    <span v-if="fileInfo" class="file-info">{{ fileInfo }}</span>
+    <!-- Navigation Buttons -->
+    <div class="navigation-group" :class="position">
+      <button class="settings-btn" @click="showSettings = true">
+        <span>Aa</span>
+      </button>
+      <button @click="handlePrev">← 前へ</button>
+      <button @click="handleNext">次へ →</button>
+      <span v-if="fileInfo" class="file-info">{{ fileInfo }}</span>
+    </div>
   </div>
 
   <!-- Settings Panel -->
@@ -84,13 +82,13 @@
 </template>
 
 <script setup>
-import { ref, computed, watch, onMounted, onUnmounted } from 'vue'
-import { useReaderStore } from '../../stores/reader'
-import { useSettingsStore } from '../../stores/settings'
-import { useEpubReader } from '../../composables/useEpubReader'
-import { usePdfReader } from '../../composables/usePdfReader'
-import TableOfContents from '../navigation/TableOfContents.vue'
-import SettingsPanel from '../settings/SettingsPanel.vue'
+import { ref, computed, watch, onMounted, onUnmounted } from "vue";
+import { useReaderStore } from "../../stores/reader";
+import { useSettingsStore } from "../../stores/settings";
+import { useEpubReader } from "../../composables/useEpubReader";
+import { usePdfReader } from "../../composables/usePdfReader";
+import TableOfContents from "../navigation/TableOfContents.vue";
+import SettingsPanel from "../settings/SettingsPanel.vue";
 
 const props = defineProps({
   paneIndex: {
@@ -99,117 +97,120 @@ const props = defineProps({
   },
   position: {
     type: String,
-    default: 'left',
+    default: "left",
   },
-})
+});
 
-const emit = defineEmits(['scroll', 'navigate'])
+const emit = defineEmits(["scroll", "navigate"]);
 
-const readerStore = useReaderStore()
-const settingsStore = useSettingsStore()
+const readerStore = useReaderStore();
+const settingsStore = useSettingsStore();
 
-const readerView = ref(null)
-const isDragging = ref(false)
-const showSettings = ref(false)
+const readerView = ref(null);
+const isDragging = ref(false);
+const showSettings = ref(false);
 
 // Initialize readers
-const epubReader = useEpubReader(props.paneIndex)
-const pdfReader = usePdfReader(props.paneIndex)
+const epubReader = useEpubReader(props.paneIndex);
+const pdfReader = usePdfReader(props.paneIndex);
 
 // Current active reader
 const activeReader = computed(() => {
-  const fileType = readerStore.fileTypes[props.paneIndex]
-  if (fileType === 'epub') return epubReader
-  if (fileType === 'pdf') return pdfReader
-  return null
-})
+  const fileType = readerStore.fileTypes[props.paneIndex];
+  if (fileType === "epub") return epubReader;
+  if (fileType === "pdf") return pdfReader;
+  return null;
+});
 
 const hasContent = computed(() => {
-  return readerStore.books[props.paneIndex] !== null
-})
+  return readerStore.books[props.paneIndex] !== null;
+});
 
 const fileInfo = computed(() => {
-  const name = readerStore.fileNames[props.paneIndex]
-  const type = readerStore.fileTypes[props.paneIndex]
-  if (!name) return ''
+  const name = readerStore.fileNames[props.paneIndex];
+  const type = readerStore.fileTypes[props.paneIndex];
+  if (!name) return "";
 
-  if (type === 'pdf') {
-    const current = readerStore.currentPages[props.paneIndex]
-    const total = readerStore.totalPages[props.paneIndex]
-    return `${name} (${current}/${total})`
+  if (type === "pdf") {
+    const current = readerStore.currentPages[props.paneIndex];
+    const total = readerStore.totalPages[props.paneIndex];
+    return `${name} (${current}/${total})`;
   }
 
-  return name
-})
+  return name;
+});
 
 // Set container ref after mount
 onMounted(() => {
   if (readerView.value) {
-    epubReader.containerRef.value = readerView.value
-    pdfReader.containerRef.value = readerView.value
+    epubReader.containerRef.value = readerView.value;
+    pdfReader.containerRef.value = readerView.value;
   }
-})
+});
 
 // Watch for container changes
 watch(readerView, (newVal) => {
   if (newVal) {
-    epubReader.containerRef.value = newVal
-    pdfReader.containerRef.value = newVal
+    epubReader.containerRef.value = newVal;
+    pdfReader.containerRef.value = newVal;
   }
-})
+});
 
 // Handle file drop
 async function handleDrop(event) {
-  isDragging.value = false
+  isDragging.value = false;
 
-  const files = event.dataTransfer?.files
-  if (!files || files.length === 0) return
+  const files = event.dataTransfer?.files;
+  if (!files || files.length === 0) return;
 
-  const file = files[0]
-  await openFile(file)
+  const file = files[0];
+  await openFile(file);
 }
 
 // Open file
 async function openFile(file) {
-  const extension = file.name.split('.').pop()?.toLowerCase()
+  const extension = file.name.split(".").pop()?.toLowerCase();
 
-  if (extension === 'epub') {
-    await epubReader.openFile(file)
-  } else if (extension === 'pdf') {
-    await pdfReader.openFile(file)
+  if (extension === "epub") {
+    await epubReader.openFile(file);
+  } else if (extension === "pdf") {
+    await pdfReader.openFile(file);
   } else {
-    readerStore.setError(props.paneIndex, '対応していないファイル形式です。EPUB または PDF を選択してください。')
+    readerStore.setError(
+      props.paneIndex,
+      "対応していないファイル形式です。EPUB または PDF を選択してください。"
+    );
   }
 }
 
 // Handle navigation
 function handleNavigate(href) {
-  activeReader.value?.goTo(href)
+  activeReader.value?.goTo(href);
 }
 
 function handleNext() {
-  activeReader.value?.next()
-  emit('navigate', props.paneIndex, 'next')
+  activeReader.value?.next();
+  emit("navigate", props.paneIndex, "next");
 }
 
 function handlePrev() {
-  activeReader.value?.prev()
-  emit('navigate', props.paneIndex, 'prev')
+  activeReader.value?.prev();
+  emit("navigate", props.paneIndex, "prev");
 }
 
 // Handle scroll
 function handleScroll() {
-  if (readerStore.fileTypes[props.paneIndex] === 'pdf') {
-    pdfReader.updateCurrentPage()
+  if (readerStore.fileTypes[props.paneIndex] === "pdf") {
+    pdfReader.updateCurrentPage();
   }
-  emit('scroll', props.paneIndex)
+  emit("scroll", props.paneIndex);
 }
 
 // Handle settings changed
 function handleSettingsChanged() {
-  if (readerStore.fileTypes[props.paneIndex] === 'epub') {
-    epubReader.applyTheme()
-    epubReader.applySettings()
+  if (readerStore.fileTypes[props.paneIndex] === "epub") {
+    epubReader.applyTheme();
+    epubReader.applySettings();
   }
 }
 
@@ -221,20 +222,29 @@ defineExpose({
   resize: () => activeReader.value?.resize?.(),
   next: () => activeReader.value?.next?.(),
   prev: () => activeReader.value?.prev?.(),
-})
+});
 
 // Cleanup
 onUnmounted(() => {
-  epubReader.cleanup()
-  pdfReader.cleanup()
-})
+  epubReader.cleanup();
+  pdfReader.cleanup();
+});
 </script>
 
 <style scoped>
+.reader-pane-container {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+}
+
 .reader-wrapper {
   flex: 1;
   display: flex;
   min-width: 0;
+  min-height: 0;
   position: relative;
   background: var(--bg-primary);
   border-radius: 8px;
@@ -260,7 +270,7 @@ onUnmounted(() => {
 }
 
 .reader-content.dragover::after {
-  content: '';
+  content: "";
   position: absolute;
   inset: 0;
   background: var(--accent-light);
@@ -298,7 +308,9 @@ onUnmounted(() => {
 }
 
 @keyframes spin {
-  to { transform: rotate(360deg); }
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 .drop-icon {
@@ -336,11 +348,16 @@ onUnmounted(() => {
   align-items: center;
   padding: 0.75rem;
   background: var(--bg-secondary);
-  border-top: 1px solid var(--border-color);
+  border-bottom: 1px solid var(--border-color);
+  flex-shrink: 0;
 }
 
 .navigation-group.left {
   border-right: 1px solid var(--border-color);
+}
+
+.navigation-group.right {
+  justify-content: flex-end;
 }
 
 .navigation-group button {

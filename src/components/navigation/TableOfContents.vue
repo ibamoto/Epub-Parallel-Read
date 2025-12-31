@@ -1,5 +1,5 @@
 <template>
-  <div class="toc-sidebar" :class="{ 'toc-hidden': !visible }">
+  <div class="toc-sidebar" :class="{ 'toc-hidden': !visible, 'toc-left': position === 'left', 'toc-right': position === 'right' }">
     <div class="toc-header">
       <button v-if="position === 'left'" class="toc-toggle" @click="$emit('toggle')">
         <span class="toggle-icon">{{ visible ? '◀' : '▶' }}</span>
@@ -78,7 +78,14 @@ function isActive(item) {
   flex-shrink: 0;
   box-sizing: border-box;
   transition: all 0.3s ease-in-out;
+}
+
+.toc-sidebar.toc-left {
   border-right: 1px solid var(--border-color);
+}
+
+.toc-sidebar.toc-right {
+  border-left: 1px solid var(--border-color);
 }
 
 .toc-hidden {

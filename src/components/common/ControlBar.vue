@@ -14,7 +14,7 @@
         <input type="file" @change="$emit('file-select', 0, $event)" :accept="acceptTypes" />
         <span>左ペイン</span>
       </label>
-      <label class="file-input-label">
+      <label class="file-input-label right-pane">
         <input type="file" @change="$emit('file-select', 1, $event)" :accept="acceptTypes" />
         <span>右ペイン</span>
       </label>
@@ -116,6 +116,11 @@ defineEmits(['file-select'])
 .file-inputs {
   display: flex;
   gap: 0.5rem;
+  flex: 1;
+}
+
+.file-input-label.right-pane {
+  margin-left: auto;
 }
 
 .file-input-label {

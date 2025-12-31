@@ -35,7 +35,7 @@
     "@capacitor/core": "^6.0.0",
     "@capacitor/ios": "^6.0.0",
     "@vitejs/plugin-vue": "^5.2.1",
-    "electron": "^33.2.1",
+    "electron": "^39.2.7",
     "electron-builder": "^25.1.8",
     "vite": "^6.0.7",
     "vite-plugin-electron": "^0.28.0",
@@ -56,7 +56,9 @@
       "target": [
         {
           "target": "dmg",
-          "arch": ["universal"]
+          "arch": [
+            "universal"
+          ]
         }
       ],
       "category": "public.app-category.books",
@@ -75,7 +77,10 @@
       "target": [
         {
           "target": "nsis",
-          "arch": ["x64", "arm64"]
+          "arch": [
+            "x64",
+            "arm64"
+          ]
         }
       ],
       "icon": "src-electron/icon.png"
