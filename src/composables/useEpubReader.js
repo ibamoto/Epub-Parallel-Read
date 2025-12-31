@@ -209,9 +209,9 @@ export function useEpubReader(paneIndex) {
       })
 
       // Handle wheel events based on scroll mode setting
-      // foliate-view does not handle wheel events by default, so we need custom handling
+      // foliate-view captures wheel events internally, so we use capture phase
       let wheelDebounce = null
-      wrapper.addEventListener('wheel', (e) => {
+      const wheelHandler = (e) => {
         const settings = settingsStore.paneSettings[paneIndex]
 
         e.preventDefault()
@@ -251,7 +251,11 @@ export function useEpubReader(paneIndex) {
           bubbles: true,
           detail: { deltaY: e.deltaY, deltaX: e.deltaX }
         }))
-      }, { passive: false })
+      }
+
+      // Add wheel listener to both wrapper and foliate-view with capture phase
+      wrapper.addEventListener('wheel', wheelHandler, { passive: false, capture: true })
+      foliateView.addEventListener('wheel', wheelHandler, { passive: false, capture: true })
 
       // Initialize view
       await foliateView.init({ showTextStart: true })
