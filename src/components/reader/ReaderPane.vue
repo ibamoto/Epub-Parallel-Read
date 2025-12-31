@@ -70,15 +70,15 @@
       <button @click="handleNext">次へ →</button>
       <span v-if="fileInfo" class="file-info">{{ fileInfo }}</span>
     </div>
-  </div>
 
-  <!-- Settings Panel -->
-  <SettingsPanel
-    :visible="showSettings"
-    :paneIndex="paneIndex"
-    @close="showSettings = false"
-    @settings-changed="handleSettingsChanged"
-  />
+    <!-- Settings Panel (uses Teleport, so placement here doesn't affect layout) -->
+    <SettingsPanel
+      :visible="showSettings"
+      :paneIndex="paneIndex"
+      @close="showSettings = false"
+      @settings-changed="handleSettingsChanged"
+    />
+  </div>
 </template>
 
 <script setup>
