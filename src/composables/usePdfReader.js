@@ -32,8 +32,10 @@ export function usePdfReader(paneIndex) {
     if (!pdf.value) return
 
     try {
+      console.log(`[PDF] Rendering page ${pageNum}...`)
       const page = await pdf.value.getPage(pageNum)
       const viewport = page.getViewport({ scale: scale.value })
+      console.log(`[PDF] Page ${pageNum} viewport:`, viewport.width, 'x', viewport.height)
 
       canvas.width = viewport.width
       canvas.height = viewport.height
@@ -54,21 +56,30 @@ export function usePdfReader(paneIndex) {
         viewport: viewport,
       }).promise
 
+      console.log(`[PDF] Page ${pageNum} rendered successfully`)
       renderedPages.value.set(pageNum, true)
     } catch (error) {
-      console.error(`Error rendering page ${pageNum}:`, error)
+      console.error(`[PDF] Error rendering page ${pageNum}:`, error)
     }
   }
 
   // Render all pages
   async function renderAllPages() {
-    if (!pdf.value || !containerRef.value) return
+    console.log('[PDF] renderAllPages called')
+    console.log('[PDF] pdf.value:', !!pdf.value)
+    console.log('[PDF] containerRef.value:', !!containerRef.value)
+
+    if (!pdf.value || !containerRef.value) {
+      console.log('[PDF] renderAllPages aborted - missing pdf or container')
+      return
+    }
 
     const container = containerRef.value
     container.innerHTML = ''
 
     const fragment = document.createDocumentFragment()
 
+    console.log('[PDF] Creating', totalPages.value, 'canvas elements')
     for (let i = 1; i <= totalPages.value; i++) {
       const canvas = createPageCanvas(i)
       fragment.appendChild(canvas)
@@ -78,9 +89,11 @@ export function usePdfReader(paneIndex) {
 
     // Render pages
     const canvases = container.querySelectorAll('canvas')
+    console.log('[PDF] Rendering', canvases.length, 'pages')
     for (let i = 0; i < canvases.length; i++) {
       await renderPage(i + 1, canvases[i])
     }
+    console.log('[PDF] All pages rendered')
   }
 
   // Generate TOC from PDF outline
@@ -138,6 +151,9 @@ export function usePdfReader(paneIndex) {
 
   // Open PDF file
   async function openFile(file) {
+    console.log('[PDF] openFile called, file:', file.name)
+    console.log('[PDF] containerRef:', containerRef.value)
+
     if (!containerRef.value) {
       throw new Error('Container not ready')
     }
@@ -150,11 +166,16 @@ export function usePdfReader(paneIndex) {
       cleanup()
 
       // Read file as ArrayBuffer
+      console.log('[PDF] Reading file as ArrayBuffer...')
       const arrayBuffer = await file.arrayBuffer()
+      console.log('[PDF] ArrayBuffer size:', arrayBuffer.byteLength)
 
       // Load PDF
+      console.log('[PDF] Loading PDF document...')
+      console.log('[PDF] Worker source:', pdfjsLib.GlobalWorkerOptions.workerSrc)
       const loadingTask = pdfjsLib.getDocument({ data: arrayBuffer })
       pdf.value = await loadingTask.promise
+      console.log('[PDF] PDF loaded, pages:', pdf.value.numPages)
 
       totalPages.value = pdf.value.numPages
       currentPage.value = 1
