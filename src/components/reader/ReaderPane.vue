@@ -145,8 +145,17 @@ onMounted(() => {
   if (readerView.value) {
     epubReader.containerRef.value = readerView.value;
     pdfReader.containerRef.value = readerView.value;
+
+    // Listen for custom epub-wheel events dispatched from foliate-view
+    // This enables scroll sync for EPUB files where wheel events are captured internally
+    readerView.value.addEventListener('epub-wheel', handleEpubWheel);
   }
 });
+
+// Handle wheel events from EPUB viewer for scroll sync
+function handleEpubWheel() {
+  emit("scroll", props.paneIndex);
+}
 
 // Watch for container changes
 watch(readerView, (newVal) => {
@@ -226,6 +235,10 @@ defineExpose({
 
 // Cleanup
 onUnmounted(() => {
+  // Remove epub-wheel event listener
+  if (readerView.value) {
+    readerView.value.removeEventListener('epub-wheel', handleEpubWheel);
+  }
   epubReader.cleanup();
   pdfReader.cleanup();
 });
