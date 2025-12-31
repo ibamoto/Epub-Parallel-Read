@@ -11,16 +11,29 @@
     "preview": "vite preview",
     "electron:dev": "vite --mode electron",
     "electron:build": "vite build && electron-builder",
-    "electron:build:mac": "vite build && electron-builder --mac",
-    "electron:build:win": "vite build && electron-builder --win"
+    "electron:build:mac": "vite build && electron-builder --mac dmg",
+    "electron:build:mac:mas": "vite build && electron-builder --mac mas",
+    "electron:build:win": "vite build && electron-builder --win",
+    "electron:build:linux": "vite build && electron-builder --linux",
+    "cap:init": "cap init 'Parallel Read' com.parallelread.app --web-dir dist",
+    "cap:add:android": "cap add android",
+    "cap:add:ios": "cap add ios",
+    "cap:sync": "cap sync",
+    "cap:open:android": "cap open android",
+    "cap:open:ios": "cap open ios",
+    "mobile:build": "vite build && cap sync"
   },
   "dependencies": {
-    "vue": "^3.5.13",
-    "pinia": "^2.3.0",
+    "foliate-js": "^1.0.1",
     "pdfjs-dist": "^4.9.155",
-    "epubjs": "^0.3.93"
+    "pinia": "^2.3.0",
+    "vue": "^3.5.13"
   },
   "devDependencies": {
+    "@capacitor/android": "^6.0.0",
+    "@capacitor/cli": "^6.0.0",
+    "@capacitor/core": "^6.0.0",
+    "@capacitor/ios": "^6.0.0",
     "@vitejs/plugin-vue": "^5.2.1",
     "electron": "^33.2.1",
     "electron-builder": "^25.1.8",
@@ -29,8 +42,9 @@
     "vite-plugin-electron-renderer": "^0.14.6"
   },
   "build": {
-    "appId": "com.epub.reader",
+    "appId": "com.parallelread.app",
     "productName": "Parallel Read",
+    "copyright": "Copyright © 2024",
     "directories": {
       "output": "release"
     },
@@ -40,16 +54,43 @@
     ],
     "mac": {
       "target": [
-        "dmg"
+        {
+          "target": "dmg",
+          "arch": ["universal"]
+        }
       ],
       "category": "public.app-category.books",
+      "icon": "src-electron/icon.png",
       "entitlements": "resources/entitlements.mac.plist",
-      "entitlementsInherit": "resources/entitlements.mac.plist"
+      "entitlementsInherit": "resources/entitlements.mac.plist",
+      "hardenedRuntime": true,
+      "gatekeeperAssess": false
+    },
+    "mas": {
+      "entitlements": "resources/entitlements.mas.plist",
+      "entitlementsInherit": "resources/entitlements.mas.inherit.plist",
+      "hardenedRuntime": false
     },
     "win": {
       "target": [
-        "nsis"
-      ]
+        {
+          "target": "nsis",
+          "arch": ["x64", "arm64"]
+        }
+      ],
+      "icon": "src-electron/icon.png"
+    },
+    "linux": {
+      "target": [
+        "AppImage",
+        "deb"
+      ],
+      "category": "Office",
+      "icon": "src-electron/icon.png"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true
     }
   }
 }

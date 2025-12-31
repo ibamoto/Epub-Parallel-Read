@@ -1,7 +1,9 @@
 import { ref, onUnmounted } from 'vue'
-import Epub from 'epubjs'
 import { useReaderStore } from '../stores/reader'
 import { useSettingsStore } from '../stores/settings'
+
+// Import foliate-js modules
+import { View, makeBook } from 'foliate-js/view.js'
 
 export function useEpubReader(paneIndex) {
   const readerStore = useReaderStore()
@@ -9,11 +11,13 @@ export function useEpubReader(paneIndex) {
 
   const containerRef = ref(null)
   const book = ref(null)
-  const rendition = ref(null)
+  const view = ref(null)
   const isReady = ref(false)
+  const styleElement = ref(null)
 
   // Process TOC to flat structure
   function processToc(toc) {
+    if (!toc) return []
     const result = []
     const processItem = (item, level = 0) => {
       result.push({
@@ -29,61 +33,115 @@ export function useEpubReader(paneIndex) {
     return result
   }
 
-  // Apply theme to rendition
-  function applyTheme() {
-    if (!rendition.value) return
-
+  // Generate scoped styles for foliate-view
+  function generateScopedStyles() {
     const colors = settingsStore.getThemeColors()
-    const theme = {
-      body: {
-        background: `${colors.background} !important`,
-        color: `${colors.text} !important`,
-      },
-      'p, div, span': {
-        color: `${colors.text} !important`,
-      },
-      a: {
-        color: `${colors.link} !important`,
-      },
-      'h1, h2, h3, h4, h5, h6': {
-        color: `${colors.text} !important`,
-      },
-    }
-
-    rendition.value.themes.register('current', theme)
-    rendition.value.themes.select('current')
-  }
-
-  // Apply text settings to rendition
-  function applySettings() {
-    if (!rendition.value) return
-
     const settings = settingsStore.paneSettings[paneIndex]
     const fontFamily = settings.fontFamily === 'system-ui'
       ? 'system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen, Ubuntu, Cantarell, "Open Sans", "Helvetica Neue", sans-serif'
       : settings.fontFamily
 
-    const textTheme = {
-      body: {
-        'font-family': fontFamily,
-        'font-size': `${settings.fontSize}px`,
-        'font-weight': settings.fontWeight,
-        'line-height': settings.lineHeight,
-        'letter-spacing': `${settings.letterSpacing}em`,
-        'text-align': settings.textAlign,
-      },
-      'body > *': {
-        'margin-left': `${settings.marginLeft}px`,
-        'margin-right': `${settings.marginRight}px`,
-      },
-      'body > p, body > div': {
-        'margin-top': `${settings.paragraphSpacing}em`,
-        'margin-bottom': `${settings.paragraphSpacing}em`,
-      },
-    }
+    return `
+      .foliate-container-${paneIndex} {
+        width: 100%;
+        height: 100%;
+        background: ${colors.background};
+      }
 
-    rendition.value.themes.register('text-settings', textTheme)
-    rendition.value.themes.select('text-settings')
+      .foliate-container-${paneIndex} foliate-view {
+        width: 100%;
+        height: 100%;
+        --foliate-background: ${colors.background};
+        --foliate-color: ${colors.text};
+        --foliate-font-family: ${fontFamily};
+        --foliate-font-size: ${settings.fontSize}px;
+        --foliate-font-weight: ${settings.fontWeight};
+        --foliate-line-height: ${settings.lineHeight};
+        --foliate-letter-spacing: ${settings.letterSpacing}em;
+        --foliate-text-align: ${settings.textAlign};
+        --foliate-margin: ${settings.marginTop}px ${settings.marginRight}px ${settings.marginBottom}px ${settings.marginLeft}px;
+      }
+
+      .foliate-container-${paneIndex} foliate-view::part(container) {
+        background: ${colors.background};
+      }
+
+      .foliate-container-${paneIndex} foliate-view::part(filter) {
+        background: ${colors.background};
+      }
+    `
+  }
+
+  // Update styles
+  function updateStyles() {
+    if (!styleElement.value) return
+    styleElement.value.textContent = generateScopedStyles()
+
+    // Also inject styles into the view if available
+    if (view.value?.renderer) {
+      injectContentStyles()
+    }
+  }
+
+  // Inject styles into content documents
+  function injectContentStyles() {
+    if (!view.value?.renderer?.getContents) return
+
+    const colors = settingsStore.getThemeColors()
+    const settings = settingsStore.paneSettings[paneIndex]
+    const fontFamily = settings.fontFamily === 'system-ui'
+      ? 'system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen, Ubuntu, Cantarell, "Open Sans", "Helvetica Neue", sans-serif'
+      : settings.fontFamily
+
+    const css = `
+      html, body {
+        background: ${colors.background} !important;
+        color: ${colors.text} !important;
+        font-family: ${fontFamily} !important;
+        font-size: ${settings.fontSize}px !important;
+        font-weight: ${settings.fontWeight} !important;
+        line-height: ${settings.lineHeight} !important;
+        letter-spacing: ${settings.letterSpacing}em !important;
+        text-align: ${settings.textAlign} !important;
+      }
+      a { color: ${colors.link} !important; }
+      p, div, span { color: ${colors.text} !important; }
+      h1, h2, h3, h4, h5, h6 { color: ${colors.text} !important; }
+      p {
+        margin-top: ${settings.paragraphSpacing}em !important;
+        margin-bottom: ${settings.paragraphSpacing}em !important;
+      }
+      img { max-width: 100%; height: auto; }
+    `
+
+    try {
+      const contents = view.value.renderer.getContents()
+      for (const { doc } of contents) {
+        if (!doc) continue
+
+        // Remove existing injected style
+        const existing = doc.getElementById('foliate-injected-style')
+        if (existing) existing.remove()
+
+        // Add new style
+        const style = doc.createElement('style')
+        style.id = 'foliate-injected-style'
+        style.textContent = css
+        doc.head.appendChild(style)
+      }
+    } catch (e) {
+      console.warn('Could not inject styles:', e)
+    }
+  }
+
+  // Apply theme
+  function applyTheme() {
+    updateStyles()
+  }
+
+  // Apply settings
+  function applySettings() {
+    updateStyles()
   }
 
   // Open EPUB file
@@ -96,66 +154,60 @@ export function useEpubReader(paneIndex) {
     readerStore.clearError(paneIndex)
 
     try {
-      // Cleanup previous book
+      // Cleanup previous
       cleanup()
 
-      // Read file as ArrayBuffer
-      const arrayBuffer = await file.arrayBuffer()
+      // Create style element
+      styleElement.value = document.createElement('style')
+      styleElement.value.id = `foliate-styles-${paneIndex}`
+      document.head.appendChild(styleElement.value)
+      updateStyles()
 
-      // Create new book
-      book.value = Epub(arrayBuffer)
-      await book.value.ready
+      // Create container wrapper
+      const wrapper = document.createElement('div')
+      wrapper.className = `foliate-container-${paneIndex}`
+      wrapper.style.width = '100%'
+      wrapper.style.height = '100%'
+      containerRef.value.appendChild(wrapper)
+
+      // Create foliate-view element
+      const foliateView = document.createElement('foliate-view')
+      wrapper.appendChild(foliateView)
+      view.value = foliateView
+
+      // Open the book
+      await foliateView.open(file)
+      book.value = foliateView.book
 
       // Get metadata
       console.log(`Book ${paneIndex} metadata:`, book.value.metadata)
 
       // Get TOC
-      const navigation = await book.value.navigation
-      const toc = processToc(navigation.toc)
+      const toc = processToc(book.value.toc)
       readerStore.setToc(paneIndex, toc)
 
-      // Create rendition
-      rendition.value = book.value.renderTo(containerRef.value, {
-        width: '100%',
-        height: '100%',
-        spread: 'none',
-        manager: 'continuous',
-        flow: 'scrolled-doc',
-        snap: false,
-        allowScriptedContent: true,
-        allowPopups: true,
-      })
-
-      // Apply themes
-      applyTheme()
-      applySettings()
-
       // Setup event listeners
-      rendition.value.on('relocated', (location) => {
-        if (location?.start?.cfi) {
-          readerStore.setCurrentLocation(paneIndex, location.start.cfi)
+      foliateView.addEventListener('relocate', (e) => {
+        const { cfi } = e.detail
+        if (cfi) {
+          readerStore.setCurrentLocation(paneIndex, cfi)
         }
       })
 
-      // Display book
-      const savedLocation = readerStore.currentLocations[paneIndex]
-      if (savedLocation) {
-        await rendition.value.display(savedLocation)
-      } else {
-        await rendition.value.display()
-      }
+      foliateView.addEventListener('load', () => {
+        // Inject styles when content loads
+        injectContentStyles()
+      })
+
+      // Initialize view
+      await foliateView.init({ showTextStart: true })
 
       // Store references
       readerStore.setBook(paneIndex, book.value, 'epub')
-      readerStore.setRendition(paneIndex, rendition.value)
+      readerStore.setRendition(paneIndex, view.value)
       readerStore.setFileName(paneIndex, file.name)
 
       isReady.value = true
-
-      // Trigger resize after render
-      setTimeout(() => {
-        rendition.value?.resize()
-      }, 100)
 
     } catch (error) {
       console.error(`Error opening EPUB ${paneIndex}:`, error)
@@ -168,37 +220,37 @@ export function useEpubReader(paneIndex) {
 
   // Navigate to specific location
   async function goTo(href) {
-    if (!rendition.value) return
+    if (!view.value) return
     try {
-      await rendition.value.display(href)
+      await view.value.goTo(href)
     } catch (error) {
       console.error('Error navigating:', error)
     }
   }
 
-  // Navigate to next page/section
+  // Navigate to next page
   async function next() {
-    if (!rendition.value) return
+    if (!view.value) return
     try {
-      await rendition.value.next()
+      await view.value.next()
     } catch (error) {
       console.error('Error navigating next:', error)
     }
   }
 
-  // Navigate to previous page/section
+  // Navigate to previous page
   async function prev() {
-    if (!rendition.value) return
+    if (!view.value) return
     try {
-      await rendition.value.prev()
+      await view.value.prev()
     } catch (error) {
       console.error('Error navigating prev:', error)
     }
   }
 
-  // Resize rendition
+  // Resize (no-op for foliate-js, handles it automatically)
   function resize() {
-    rendition.value?.resize()
+    // foliate-js handles resize automatically
   }
 
   // Get scroll info for sync
@@ -215,30 +267,38 @@ export function useEpubReader(paneIndex) {
 
   // Set scroll position by ratio
   function setScrollByRatio(ratio) {
-    if (!containerRef.value) return
-    const el = containerRef.value
-    const maxScroll = el.scrollHeight - el.clientHeight
-    el.scrollTop = ratio * maxScroll
+    if (!view.value || !view.value.goToFraction) return
+    try {
+      view.value.goToFraction(ratio)
+    } catch (e) {
+      console.warn('Could not set scroll position:', e)
+    }
   }
 
   // Cleanup
   function cleanup() {
-    if (rendition.value) {
+    // Close view
+    if (view.value) {
       try {
-        rendition.value.destroy()
+        view.value.close()
       } catch (e) {
-        console.warn('Error destroying rendition:', e)
+        console.warn('Error closing view:', e)
       }
-      rendition.value = null
+      view.value = null
     }
-    if (book.value) {
-      try {
-        book.value.destroy()
-      } catch (e) {
-        console.warn('Error destroying book:', e)
-      }
-      book.value = null
+
+    // Remove style element
+    if (styleElement.value && styleElement.value.parentNode) {
+      styleElement.value.parentNode.removeChild(styleElement.value)
+      styleElement.value = null
     }
+
+    // Clear container
+    if (containerRef.value) {
+      containerRef.value.innerHTML = ''
+    }
+
+    book.value = null
     isReady.value = false
   }
 
@@ -250,7 +310,6 @@ export function useEpubReader(paneIndex) {
   return {
     containerRef,
     book,
-    rendition,
     isReady,
     openFile,
     goTo,
