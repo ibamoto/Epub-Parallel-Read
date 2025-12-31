@@ -1,12 +1,13 @@
-import { ref, shallowRef } from 'vue'
+import { ref } from 'vue'
 
 const DB_NAME = 'EpubParallelReadHistory'
-const DB_VERSION = 1
+const DB_VERSION = 2
 const STORE_NAME = 'files'
-const MAX_HISTORY_ITEMS = 10
+const MAX_HISTORY_ITEMS_PER_PANE = 10
 
-// Shared state across components
-const history = ref([])
+// Shared state across components - separate history for each pane
+const leftHistory = ref([])
+const rightHistory = ref([])
 const isInitialized = ref(false)
 let dbInstance = null
 
@@ -25,26 +26,32 @@ async function openDB() {
 
     request.onupgradeneeded = (event) => {
       const db = event.target.result
-      if (!db.objectStoreNames.contains(STORE_NAME)) {
-        const store = db.createObjectStore(STORE_NAME, { keyPath: 'id', autoIncrement: true })
-        store.createIndex('fileName', 'fileName', { unique: false })
-        store.createIndex('openedAt', 'openedAt', { unique: false })
+
+      // Delete old store if exists and create new one with paneIndex
+      if (db.objectStoreNames.contains(STORE_NAME)) {
+        db.deleteObjectStore(STORE_NAME)
       }
+
+      const store = db.createObjectStore(STORE_NAME, { keyPath: 'id', autoIncrement: true })
+      store.createIndex('fileName', 'fileName', { unique: false })
+      store.createIndex('openedAt', 'openedAt', { unique: false })
+      store.createIndex('paneIndex', 'paneIndex', { unique: false })
+      store.createIndex('paneAndFile', ['paneIndex', 'fileName'], { unique: false })
     }
   })
 }
 
-// Get all history items (metadata only, no file content)
-async function loadHistory() {
+// Get history items for a specific pane
+async function loadHistoryForPane(paneIndex) {
   const db = await openDB()
   return new Promise((resolve, reject) => {
     const transaction = db.transaction(STORE_NAME, 'readonly')
     const store = transaction.objectStore(STORE_NAME)
-    const request = store.getAll()
+    const index = store.index('paneIndex')
+    const request = index.getAll(paneIndex)
 
     request.onerror = () => reject(request.error)
     request.onsuccess = () => {
-      // Sort by openedAt descending (most recent first)
       const items = request.result
         .map(item => ({
           id: item.id,
@@ -52,6 +59,7 @@ async function loadHistory() {
           fileType: item.fileType,
           fileSize: item.fileSize,
           openedAt: item.openedAt,
+          paneIndex: item.paneIndex,
         }))
         .sort((a, b) => b.openedAt - a.openedAt)
       resolve(items)
@@ -59,8 +67,18 @@ async function loadHistory() {
   })
 }
 
-// Add file to history
-async function addToHistory(file) {
+// Load all history
+async function loadAllHistory() {
+  const [left, right] = await Promise.all([
+    loadHistoryForPane(0),
+    loadHistoryForPane(1)
+  ])
+  leftHistory.value = left
+  rightHistory.value = right
+}
+
+// Add file to history for a specific pane
+async function addToHistory(file, paneIndex) {
   const db = await openDB()
 
   // Read file as ArrayBuffer
@@ -71,14 +89,14 @@ async function addToHistory(file) {
     const transaction = db.transaction(STORE_NAME, 'readwrite')
     const store = transaction.objectStore(STORE_NAME)
 
-    // First, check if file with same name exists
-    const index = store.index('fileName')
-    const checkRequest = index.getAll(file.name)
+    // Check if file with same name exists in this pane
+    const index = store.index('paneAndFile')
+    const checkRequest = index.getAll([paneIndex, file.name])
 
     checkRequest.onsuccess = () => {
       const existing = checkRequest.result
 
-      // Delete existing entries with same filename
+      // Delete existing entries with same filename in this pane
       existing.forEach(item => {
         store.delete(item.id)
       })
@@ -90,15 +108,15 @@ async function addToHistory(file) {
         fileSize: file.size,
         fileData: arrayBuffer,
         openedAt: Date.now(),
+        paneIndex: paneIndex,
       }
 
       const addRequest = store.add(entry)
       addRequest.onerror = () => reject(addRequest.error)
       addRequest.onsuccess = () => {
-        // Cleanup old entries if exceeding max
-        cleanupOldEntries().then(() => {
-          loadHistory().then(items => {
-            history.value = items
+        // Cleanup old entries if exceeding max for this pane
+        cleanupOldEntriesForPane(paneIndex).then(() => {
+          loadAllHistory().then(() => {
             resolve(addRequest.result)
           })
         })
@@ -142,22 +160,21 @@ async function deleteFromHistory(id) {
 
     request.onerror = () => reject(request.error)
     request.onsuccess = () => {
-      loadHistory().then(items => {
-        history.value = items
+      loadAllHistory().then(() => {
         resolve()
       })
     }
   })
 }
 
-// Cleanup old entries
-async function cleanupOldEntries() {
+// Cleanup old entries for a specific pane
+async function cleanupOldEntriesForPane(paneIndex) {
   const db = await openDB()
   return new Promise((resolve, reject) => {
     const transaction = db.transaction(STORE_NAME, 'readwrite')
     const store = transaction.objectStore(STORE_NAME)
-    const index = store.index('openedAt')
-    const request = index.openCursor(null, 'prev')
+    const index = store.index('paneIndex')
+    const request = index.openCursor(IDBKeyRange.only(paneIndex), 'prev')
 
     let count = 0
     const idsToDelete = []
@@ -166,7 +183,7 @@ async function cleanupOldEntries() {
       const cursor = event.target.result
       if (cursor) {
         count++
-        if (count > MAX_HISTORY_ITEMS) {
+        if (count > MAX_HISTORY_ITEMS_PER_PANE) {
           idsToDelete.push(cursor.value.id)
         }
         cursor.continue()
@@ -229,7 +246,7 @@ export function useFileHistory() {
   async function init() {
     if (isInitialized.value) return
     try {
-      history.value = await loadHistory()
+      await loadAllHistory()
       isInitialized.value = true
     } catch (error) {
       console.error('Failed to initialize file history:', error)
@@ -237,7 +254,8 @@ export function useFileHistory() {
   }
 
   return {
-    history,
+    leftHistory,
+    rightHistory,
     isInitialized,
     init,
     addToHistory,
