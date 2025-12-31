@@ -1,4 +1,4 @@
-import { ref, onUnmounted } from 'vue'
+import { ref, shallowRef, onUnmounted } from 'vue'
 import * as pdfjsLib from 'pdfjs-dist'
 import pdfWorkerUrl from 'pdfjs-dist/build/pdf.worker.min.mjs?url'
 import { useReaderStore } from '../stores/reader'
@@ -12,7 +12,8 @@ export function usePdfReader(paneIndex) {
   const settingsStore = useSettingsStore()
 
   const containerRef = ref(null)
-  const pdf = ref(null)
+  // Use shallowRef to avoid Vue's Proxy wrapping pdfjs objects (causes private field access errors)
+  const pdf = shallowRef(null)
   const currentPage = ref(1)
   const totalPages = ref(0)
   const scale = ref(1.5)
