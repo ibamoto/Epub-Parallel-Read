@@ -90,7 +90,7 @@
 </template>
 
 <script setup>
-import { ref, onMounted, onUnmounted } from 'vue'
+import { ref, nextTick, onMounted, onUnmounted } from 'vue'
 import { useSettingsStore } from '../../stores/settings'
 import { useFileHistory } from '../../composables/useFileHistory'
 
@@ -137,8 +137,10 @@ function handleClickOutside(event) {
 }
 
 // Trigger file input
-function triggerFileInput(paneIndex) {
+async function triggerFileInput(paneIndex) {
   showDropdown.value[paneIndex] = false
+  // Wait for DOM to update before triggering file input
+  await nextTick()
   if (paneIndex === 0) {
     leftFileInput.value?.click()
   } else {
