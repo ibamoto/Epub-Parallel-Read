@@ -1,4 +1,4 @@
-import { ref, shallowRef, onUnmounted } from 'vue'
+import { ref, shallowRef, onUnmounted, watch } from 'vue'
 import * as pdfjsLib from 'pdfjs-dist'
 import pdfWorkerUrl from 'pdfjs-dist/build/pdf.worker.min.mjs?url'
 import { useReaderStore } from '../stores/reader'
@@ -10,6 +10,16 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = pdfWorkerUrl
 export function usePdfReader(paneIndex) {
   const readerStore = useReaderStore()
   const settingsStore = useSettingsStore()
+
+  // Watch for scroll mode changes
+  watch(
+    () => settingsStore.paneSettings[paneIndex]?.epubScrollMode,
+    (newMode) => {
+      if (isReady.value && containerRef.value) {
+        updatePageVisibility()
+      }
+    }
+  )
 
   const containerRef = ref(null)
   // Use shallowRef to avoid Vue's Proxy wrapping pdfjs objects (causes private field access errors)
@@ -283,6 +293,9 @@ export function usePdfReader(paneIndex) {
       // Setup wheel event handler for scroll mode
       setupWheelHandler()
 
+      // Apply initial page visibility based on scroll mode
+      updatePageVisibility()
+
       isReady.value = true
 
     } catch (error) {
@@ -294,6 +307,56 @@ export function usePdfReader(paneIndex) {
     }
   }
 
+  // Update page visibility based on scroll mode
+  function updatePageVisibility() {
+    if (!containerRef.value) return
+
+    const settings = settingsStore.paneSettings[paneIndex]
+    const isPageMode = settings.epubScrollMode === 'page'
+    const canvases = containerRef.value.querySelectorAll('canvas')
+
+    canvases.forEach((canvas) => {
+      const pageNum = parseInt(canvas.dataset.page, 10)
+      if (isPageMode) {
+        // Page mode: show only current page, centered and fit to container
+        if (pageNum === currentPage.value) {
+          canvas.style.display = 'block'
+          canvas.style.margin = 'auto'
+          canvas.style.marginBottom = '0'
+          canvas.style.maxHeight = '100%'
+          canvas.style.maxWidth = '100%'
+          canvas.style.width = 'auto'
+          canvas.style.height = 'auto'
+          canvas.style.objectFit = 'contain'
+        } else {
+          canvas.style.display = 'none'
+        }
+      } else {
+        // Continuous mode: show all pages with margin
+        canvas.style.display = 'block'
+        canvas.style.margin = '0 auto 10px auto'
+        canvas.style.maxHeight = ''
+        canvas.style.maxWidth = ''
+        canvas.style.width = '100%'
+        canvas.style.height = 'auto'
+        canvas.style.objectFit = ''
+      }
+    })
+
+    // Adjust container layout for page mode
+    if (isPageMode) {
+      containerRef.value.style.overflow = 'hidden'
+      containerRef.value.style.display = 'flex'
+      containerRef.value.style.alignItems = 'center'
+      containerRef.value.style.justifyContent = 'center'
+    } else {
+      containerRef.value.style.overflow = 'auto'
+      containerRef.value.style.display = 'block'
+      containerRef.value.style.alignItems = ''
+      containerRef.value.style.justifyContent = ''
+    }
+  }
+
   // Go to specific page
   function goToPage(pageNum) {
     if (!containerRef.value || pageNum < 1 || pageNum > totalPages.value) return
@@ -302,9 +365,18 @@ export function usePdfReader(paneIndex) {
     if (canvas) {
       // Ensure the target page and surrounding pages are rendered
       renderPageWithBuffer(pageNum)
-      canvas.scrollIntoView({ behavior: 'smooth', block: 'start' })
+
       currentPage.value = pageNum
       readerStore.setCurrentPage(paneIndex, pageNum)
+
+      const settings = settingsStore.paneSettings[paneIndex]
+      if (settings.epubScrollMode === 'page') {
+        // Page mode: show only this page
+        updatePageVisibility()
+      } else {
+        // Continuous mode: scroll to page
+        canvas.scrollIntoView({ behavior: 'smooth', block: 'start' })
+      }
     }
   }
 
