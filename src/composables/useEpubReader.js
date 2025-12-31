@@ -209,15 +209,16 @@ export function useEpubReader(paneIndex) {
       })
 
       // Handle wheel events based on scroll mode setting
-      // foliate-view captures wheel events internally, so we need custom handling
+      // foliate-view does not handle wheel events by default, so we need custom handling
+      let wheelDebounce = null
       wrapper.addEventListener('wheel', (e) => {
         const settings = settingsStore.paneSettings[paneIndex]
 
+        e.preventDefault()
+        e.stopPropagation()
+
         if (settings.epubScrollMode === 'continuous') {
           // Continuous scroll mode: manually control scrolling with speed adjustment
-          e.preventDefault()
-          e.stopPropagation()
-
           const scrollAmount = e.deltaY * settings.epubScrollSpeed
           if (view.value?.renderer) {
             // Use foliate-js scroll method if available, otherwise use goToFraction
@@ -231,8 +232,19 @@ export function useEpubReader(paneIndex) {
               view.value.goToFraction(newFraction)
             }
           }
+        } else {
+          // Page mode: navigate by page on wheel with debounce
+          if (wheelDebounce) return
+          wheelDebounce = setTimeout(() => {
+            wheelDebounce = null
+          }, 300)
+
+          if (e.deltaY > 0) {
+            next()
+          } else if (e.deltaY < 0) {
+            prev()
+          }
         }
-        // For 'page' mode, let foliate-js handle it naturally
 
         // Dispatch a custom event for scroll sync regardless of mode
         containerRef.value?.dispatchEvent(new CustomEvent('epub-wheel', {
