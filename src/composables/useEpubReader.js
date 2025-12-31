@@ -208,6 +208,17 @@ export function useEpubReader(paneIndex) {
         injectContentStyles()
       })
 
+      // Handle wheel events to enable scroll sync
+      // foliate-view captures wheel events internally, so we need to dispatch
+      // a custom event to notify parent components for scroll synchronization
+      wrapper.addEventListener('wheel', (e) => {
+        // Dispatch a custom event that ReaderPane can listen to
+        containerRef.value?.dispatchEvent(new CustomEvent('epub-wheel', {
+          bubbles: true,
+          detail: { deltaY: e.deltaY, deltaX: e.deltaX }
+        }))
+      }, { passive: true })
+
       // Initialize view
       await foliateView.init({ showTextStart: true })
 
