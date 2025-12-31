@@ -2,8 +2,14 @@ import { ref, onUnmounted } from 'vue'
 import { useReaderStore } from '../stores/reader'
 import { useSettingsStore } from '../stores/settings'
 
-// Import foliate-js modules
-import { View, makeBook } from 'foliate-js/view.js'
+// Import foliate-js - dynamic import to handle ES modules
+let foliateModule = null
+const getFoliateModule = async () => {
+  if (!foliateModule) {
+    foliateModule = await import('foliate-js/view.js')
+  }
+  return foliateModule
+}
 
 export function useEpubReader(paneIndex) {
   const readerStore = useReaderStore()
@@ -154,6 +160,9 @@ export function useEpubReader(paneIndex) {
     readerStore.clearError(paneIndex)
 
     try {
+      // Ensure foliate-js is loaded (registers the web component)
+      await getFoliateModule()
+
       // Cleanup previous
       cleanup()
 

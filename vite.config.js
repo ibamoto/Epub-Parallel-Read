@@ -8,7 +8,7 @@ export default defineConfig({
     vue(),
     electron({
       main: {
-        entry: 'src-electron/main.js',
+        entry: 'src-electron/main.cjs',
       },
       preload: {
         input: 'src-electron/preload.js',
@@ -38,6 +38,6 @@ export default defineConfig({
     strictPort: true,
   },
   optimizeDeps: {
-    include: ['pdfjs-dist'],
+    include: ['pdfjs-dist', 'foliate-js/view.js'],
   },
 })
