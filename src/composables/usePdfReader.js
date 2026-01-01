@@ -291,7 +291,7 @@ export function usePdfReader(paneIndex) {
     }
   }
 
-  // Update page visibility - show only current page centered
+  // Update page visibility - show only current page centered with page-like appearance
   function updatePageVisibility() {
     if (!containerRef.value) return
 
@@ -306,12 +306,13 @@ export function usePdfReader(paneIndex) {
       justify-content: center;
       flex: 1;
       min-height: 0;
-      background: var(--bg-primary);
+      padding: 16px;
+      background: var(--bg-secondary, #f0f0f0);
     `
 
     canvases.forEach((canvas) => {
       const pageNum = parseInt(canvas.dataset.page, 10)
-      // Show only current page, centered and fit to container
+      // Show only current page, centered and fit to container with page-like shadow
       if (pageNum === currentPage.value) {
         canvas.style.cssText = `
           display: block;
@@ -320,6 +321,8 @@ export function usePdfReader(paneIndex) {
           width: auto;
           height: auto;
           object-fit: contain;
+          box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+          border-radius: 2px;
         `
       } else {
         canvas.style.display = 'none'
@@ -412,24 +415,27 @@ export function usePdfReader(paneIndex) {
     containerRef.value.addEventListener('wheel', wheelHandler, { passive: false })
   }
 
-  // Get scroll info for sync
+  // Get scroll info for sync - for PDF, calculate ratio from page number
   function getScrollInfo() {
-    if (!containerRef.value) return null
-    const el = containerRef.value
+    if (!totalPages.value) return null
+    // Convert current page to scroll ratio
+    const scrollRatio = (currentPage.value - 1) / Math.max(1, totalPages.value - 1)
     return {
-      scrollTop: el.scrollTop,
-      scrollHeight: el.scrollHeight,
-      clientHeight: el.clientHeight,
-      scrollRatio: el.scrollTop / Math.max(1, el.scrollHeight - el.clientHeight),
+      scrollTop: 0,
+      scrollHeight: totalPages.value,
+      clientHeight: 1,
+      scrollRatio: scrollRatio,
     }
   }
 
-  // Set scroll position by ratio
+  // Set scroll position by ratio - for PDF, convert to page number
   function setScrollByRatio(ratio) {
-    if (!containerRef.value) return
-    const el = containerRef.value
-    const maxScroll = el.scrollHeight - el.clientHeight
-    el.scrollTop = ratio * maxScroll
+    if (!totalPages.value) return
+    // Convert scroll ratio to page number
+    const targetPage = Math.max(1, Math.min(totalPages.value, Math.round(ratio * (totalPages.value - 1)) + 1))
+    if (targetPage !== currentPage.value) {
+      goToPage(targetPage)
+    }
   }
 
   // Cleanup
