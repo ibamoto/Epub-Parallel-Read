@@ -206,6 +206,13 @@ function handleKeyDown(event) {
 
   // Arrow keys for navigation when sync mode is on
   if (settingsStore.syncMode) {
+    // Prevent scroll sync during keyboard navigation
+    isSyncing = true
+    if (syncTimeout) clearTimeout(syncTimeout)
+    syncTimeout = setTimeout(() => {
+      isSyncing = false
+    }, 300)
+
     // Left/Right arrows: page navigation for both EPUB and PDF
     if (event.key === 'ArrowLeft') {
       event.preventDefault()
