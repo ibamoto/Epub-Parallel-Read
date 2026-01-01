@@ -255,10 +255,15 @@ export function usePdfReader(paneIndex) {
       }
       wheelHandler.lastTime = Date.now()
 
+      // Get page amount from settings if useWheelAmount is enabled
+      const pageAmount = settingsStore.useWheelAmount
+        ? settingsStore.pdfPageAmounts[paneIndex]
+        : 1
+
       if (e.deltaY > 0) {
-        next()
+        goToPage(currentPage.value + pageAmount)
       } else if (e.deltaY < 0) {
-        prev()
+        goToPage(currentPage.value - pageAmount)
       }
     }
 

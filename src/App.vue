@@ -228,21 +228,23 @@ function handleKeyDown(event) {
       event.preventDefault()
       const fileType1 = readerStore.fileTypes[0]
       const fileType2 = readerStore.fileTypes[1]
-      const amount1 = settingsStore.scrollAmounts[0] // Left pane: scroll pixels for EPUB, pages for PDF
-      const amount2 = settingsStore.scrollAmounts[1] // Right pane: scroll pixels for EPUB, pages for PDF
+      const scrollAmount1 = settingsStore.scrollAmounts[0] // EPUB scroll pixels
+      const scrollAmount2 = settingsStore.scrollAmounts[1]
+      const pageAmount1 = settingsStore.pdfPageAmounts[0] // PDF pages
+      const pageAmount2 = settingsStore.pdfPageAmounts[1]
 
       if (event.key === 'ArrowUp') {
         // EPUB: scroll up, PDF: previous pages
-        if (fileType1 === 'epub') reader1.value?.scrollBy?.(-amount1)
-        if (fileType1 === 'pdf') reader1.value?.pageBy?.(-amount1)
-        if (fileType2 === 'epub') reader2.value?.scrollBy?.(-amount2)
-        if (fileType2 === 'pdf') reader2.value?.pageBy?.(-amount2)
+        if (fileType1 === 'epub') reader1.value?.scrollBy?.(-scrollAmount1)
+        if (fileType1 === 'pdf') reader1.value?.pageBy?.(-pageAmount1)
+        if (fileType2 === 'epub') reader2.value?.scrollBy?.(-scrollAmount2)
+        if (fileType2 === 'pdf') reader2.value?.pageBy?.(-pageAmount2)
       } else {
         // EPUB: scroll down, PDF: next pages
-        if (fileType1 === 'epub') reader1.value?.scrollBy?.(amount1)
-        if (fileType1 === 'pdf') reader1.value?.pageBy?.(amount1)
-        if (fileType2 === 'epub') reader2.value?.scrollBy?.(amount2)
-        if (fileType2 === 'pdf') reader2.value?.pageBy?.(amount2)
+        if (fileType1 === 'epub') reader1.value?.scrollBy?.(scrollAmount1)
+        if (fileType1 === 'pdf') reader1.value?.pageBy?.(pageAmount1)
+        if (fileType2 === 'epub') reader2.value?.scrollBy?.(scrollAmount2)
+        if (fileType2 === 'pdf') reader2.value?.pageBy?.(pageAmount2)
       }
     }
   }

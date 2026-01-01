@@ -31,8 +31,14 @@ export const useSettingsStore = defineStore('settings', () => {
   const showControls = ref(true)
   const syncSensitivity = ref(1.0)
 
-  // Per-pane scroll amount (in pixels)
+  // Per-pane scroll amount (in pixels for EPUB)
   const scrollAmounts = ref([100, 100])
+
+  // Per-pane PDF page amount (pages per navigation)
+  const pdfPageAmounts = ref([1, 1])
+
+  // Use scroll/page amount for wheel navigation
+  const useWheelAmount = ref(false)
 
   // Theme settings
   const theme = ref('light') // 'light' | 'dark' | 'sepia' | 'custom'
@@ -69,6 +75,8 @@ export const useSettingsStore = defineStore('settings', () => {
         syncSensitivity.value = parsed.syncSensitivity ?? 1.0
         theme.value = parsed.theme ?? 'light'
         scrollAmounts.value = parsed.scrollAmounts ?? [100, 100]
+        pdfPageAmounts.value = parsed.pdfPageAmounts ?? [1, 1]
+        useWheelAmount.value = parsed.useWheelAmount ?? false
 
         if (parsed.customColors) {
           customColors.value = { ...customColors.value, ...parsed.customColors }
@@ -98,6 +106,8 @@ export const useSettingsStore = defineStore('settings', () => {
         customColors: customColors.value,
         paneSettings: paneSettings.value,
         scrollAmounts: scrollAmounts.value,
+        pdfPageAmounts: pdfPageAmounts.value,
+        useWheelAmount: useWheelAmount.value,
       }
       localStorage.setItem(STORAGE_KEY, JSON.stringify(data))
     } catch (error) {
@@ -171,7 +181,7 @@ export const useSettingsStore = defineStore('settings', () => {
   }
 
   // Auto-save on changes
-  watch([isDarkMode, syncMode, showControls, syncSensitivity, theme, customColors, paneSettings, scrollAmounts], () => {
+  watch([isDarkMode, syncMode, showControls, syncSensitivity, theme, customColors, paneSettings, scrollAmounts, pdfPageAmounts, useWheelAmount], () => {
     saveSettings()
   }, { deep: true })
 
@@ -186,6 +196,8 @@ export const useSettingsStore = defineStore('settings', () => {
     paneSettings,
     fontOptions,
     scrollAmounts,
+    pdfPageAmounts,
+    useWheelAmount,
 
     // Actions
     loadSettings,
