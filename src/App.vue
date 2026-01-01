@@ -198,51 +198,65 @@ function startResize(e) {
 
 // Keyboard shortcuts
 function handleKeyDown(event) {
+  // Ignore if user is typing in an input
+  if (event.target.tagName === 'INPUT' || event.target.tagName === 'TEXTAREA') {
+    return
+  }
+
   // Ctrl/Cmd + H: Toggle controls
   if ((event.ctrlKey || event.metaKey) && event.key === 'h') {
     event.preventDefault()
     settingsStore.toggleControls()
+    return
   }
 
-  // Arrow keys for navigation when sync mode is on
+  // Arrow keys for navigation
+  const fileType1 = readerStore.fileTypes[0]
+  const fileType2 = readerStore.fileTypes[1]
+
+  // Skip if no files are open
+  if (!fileType1 && !fileType2) return
+
+  // Prevent scroll sync during keyboard navigation
   if (settingsStore.syncMode) {
-    // Prevent scroll sync during keyboard navigation
     isSyncing = true
     if (syncTimeout) clearTimeout(syncTimeout)
     syncTimeout = setTimeout(() => {
       isSyncing = false
     }, 300)
+  }
 
-    // Left/Right arrows: page navigation for both EPUB and PDF
-    if (event.key === 'ArrowLeft') {
-      event.preventDefault()
-      reader1.value?.prev?.()
-      reader2.value?.prev?.()
-    } else if (event.key === 'ArrowRight') {
-      event.preventDefault()
-      reader1.value?.next?.()
-      reader2.value?.next?.()
-    }
-    // Up/Down arrows: scroll for EPUB, page navigation for PDF
-    else if (event.key === 'ArrowUp' || event.key === 'ArrowDown') {
-      event.preventDefault()
-      const fileType1 = readerStore.fileTypes[0]
-      const fileType2 = readerStore.fileTypes[1]
-      const scrollAmount1 = settingsStore.scrollAmounts[0] // EPUB scroll pixels
-      const scrollAmount2 = settingsStore.scrollAmounts[1]
-      const pageAmount1 = settingsStore.pdfPageAmounts[0] // PDF pages
-      const pageAmount2 = settingsStore.pdfPageAmounts[1]
+  // Left/Right arrows: page navigation for both EPUB and PDF
+  if (event.key === 'ArrowLeft') {
+    event.preventDefault()
+    reader1.value?.prev?.()
+    if (settingsStore.syncMode) reader2.value?.prev?.()
+  } else if (event.key === 'ArrowRight') {
+    event.preventDefault()
+    reader1.value?.next?.()
+    if (settingsStore.syncMode) reader2.value?.next?.()
+  }
+  // Up/Down arrows: scroll for EPUB, page navigation for PDF
+  else if (event.key === 'ArrowUp' || event.key === 'ArrowDown') {
+    event.preventDefault()
+    const scrollAmount1 = settingsStore.scrollAmounts[0] // EPUB scroll pixels
+    const scrollAmount2 = settingsStore.scrollAmounts[1]
+    const pageAmount1 = settingsStore.pdfPageAmounts[0] // PDF pages
+    const pageAmount2 = settingsStore.pdfPageAmounts[1]
 
-      if (event.key === 'ArrowUp') {
-        // EPUB: scroll up, PDF: previous pages
-        if (fileType1 === 'epub') reader1.value?.scrollBy?.(-scrollAmount1)
-        if (fileType1 === 'pdf') reader1.value?.pageBy?.(-pageAmount1)
+    if (event.key === 'ArrowUp') {
+      // EPUB: scroll up, PDF: previous pages
+      if (fileType1 === 'epub') reader1.value?.scrollBy?.(-scrollAmount1)
+      if (fileType1 === 'pdf') reader1.value?.pageBy?.(-pageAmount1)
+      if (settingsStore.syncMode) {
         if (fileType2 === 'epub') reader2.value?.scrollBy?.(-scrollAmount2)
         if (fileType2 === 'pdf') reader2.value?.pageBy?.(-pageAmount2)
-      } else {
-        // EPUB: scroll down, PDF: next pages
-        if (fileType1 === 'epub') reader1.value?.scrollBy?.(scrollAmount1)
-        if (fileType1 === 'pdf') reader1.value?.pageBy?.(pageAmount1)
+      }
+    } else {
+      // EPUB: scroll down, PDF: next pages
+      if (fileType1 === 'epub') reader1.value?.scrollBy?.(scrollAmount1)
+      if (fileType1 === 'pdf') reader1.value?.pageBy?.(pageAmount1)
+      if (settingsStore.syncMode) {
         if (fileType2 === 'epub') reader2.value?.scrollBy?.(scrollAmount2)
         if (fileType2 === 'pdf') reader2.value?.pageBy?.(pageAmount2)
       }
