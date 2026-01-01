@@ -53,7 +53,7 @@ const props = defineProps({
     default: 'left', // 'left' | 'right'
   },
   currentLocation: {
-    type: [String, Number],
+    type: [String, Number, Object],
     default: null,
   },
 })
