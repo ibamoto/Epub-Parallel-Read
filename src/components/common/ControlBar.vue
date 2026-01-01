@@ -55,6 +55,7 @@
       <!-- Left Pane Scroll Amount -->
       <div class="scroll-amount-control">
         <label title="左ペインのスクロール量 (px)">⇅</label>
+        <button class="scroll-btn" @click="adjustScrollAmount(0, -10)" title="スクロール量を減らす">−</button>
         <input
           type="number"
           :value="settingsStore.scrollAmounts[0]"
@@ -64,10 +65,12 @@
           step="10"
           title="左ペインのスクロール量 (px)"
         />
+        <button class="scroll-btn" @click="adjustScrollAmount(0, 10)" title="スクロール量を増やす">+</button>
       </div>
 
       <!-- Right Pane Scroll Amount -->
       <div class="scroll-amount-control right">
+        <button class="scroll-btn" @click="adjustScrollAmount(1, -10)" title="スクロール量を減らす">−</button>
         <input
           type="number"
           :value="settingsStore.scrollAmounts[1]"
@@ -77,6 +80,7 @@
           step="10"
           title="右ペインのスクロール量 (px)"
         />
+        <button class="scroll-btn" @click="adjustScrollAmount(1, 10)" title="スクロール量を増やす">+</button>
         <label title="右ペインのスクロール量 (px)">⇅</label>
       </div>
 
@@ -215,6 +219,13 @@ function updateScrollAmount(paneIndex, event) {
   if (!isNaN(value) && value >= 10 && value <= 1000) {
     settingsStore.scrollAmounts[paneIndex] = value
   }
+}
+
+// Adjust scroll amount by delta
+function adjustScrollAmount(paneIndex, delta) {
+  const currentValue = settingsStore.scrollAmounts[paneIndex]
+  const newValue = Math.max(10, Math.min(1000, currentValue + delta))
+  settingsStore.scrollAmounts[paneIndex] = newValue
 }
 </script>
 
@@ -368,6 +379,33 @@ function updateScrollAmount(paneIndex, event) {
 
 .scroll-amount-control input[type=number] {
   -moz-appearance: textfield;
+}
+
+.scroll-btn {
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border: 1px solid var(--border-color);
+  border-radius: 4px;
+  background: var(--bg-tertiary);
+  color: var(--text-primary);
+  font-size: 0.9rem;
+  font-weight: 500;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.15s;
+  user-select: none;
+}
+
+.scroll-btn:hover {
+  background: var(--bg-hover);
+  border-color: var(--accent-color);
+}
+
+.scroll-btn:active {
+  background: var(--accent-light);
 }
 
 .file-input-label {
