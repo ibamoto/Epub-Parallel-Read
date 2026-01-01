@@ -196,13 +196,16 @@ export function usePdfReader(paneIndex) {
     }
   }
 
-  // Go to specific page
+  // Go to specific page (clamps to valid range)
   async function goToPage(pageNum) {
-    if (!pdf.value || pageNum < 1 || pageNum > totalPages.value) return
-    if (pageNum === currentPage.value) return
+    if (!pdf.value || !totalPages.value) return
 
-    currentPage.value = pageNum
-    readerStore.setCurrentPage(paneIndex, pageNum)
+    // Clamp page number to valid range
+    const clampedPage = Math.max(1, Math.min(totalPages.value, pageNum))
+    if (clampedPage === currentPage.value) return
+
+    currentPage.value = clampedPage
+    readerStore.setCurrentPage(paneIndex, clampedPage)
     await renderCurrentPage()
   }
 
