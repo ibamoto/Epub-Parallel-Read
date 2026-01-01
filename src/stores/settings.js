@@ -152,6 +152,24 @@ export const useSettingsStore = defineStore('settings', () => {
     saveSettings()
   }
 
+  // Update scroll amount for a pane
+  function setScrollAmount(paneIndex, value) {
+    scrollAmounts.value = [...scrollAmounts.value]
+    scrollAmounts.value[paneIndex] = value
+  }
+
+  // Update PDF page amount for a pane
+  function setPdfPageAmount(paneIndex, value) {
+    pdfPageAmounts.value = [...pdfPageAmounts.value]
+    pdfPageAmounts.value[paneIndex] = value
+  }
+
+  // Toggle progress bar for a pane
+  function setShowProgressBar(paneIndex, value) {
+    showProgressBar.value = [...showProgressBar.value]
+    showProgressBar.value[paneIndex] = value
+  }
+
   // Set theme
   function setTheme(newTheme) {
     theme.value = newTheme
@@ -213,6 +231,9 @@ export const useSettingsStore = defineStore('settings', () => {
     toggleControls,
     updatePaneSettings,
     resetPaneSettings,
+    setScrollAmount,
+    setPdfPageAmount,
+    setShowProgressBar,
     setTheme,
     getThemeColors,
   }
