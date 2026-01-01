@@ -224,9 +224,15 @@ export function useEpubReader(paneIndex) {
         }
       }
 
-      // Remove temporary view
-      tempView.close()
-      document.body.removeChild(tempView)
+      // Remove temporary view (try to close, but don't fail if it errors)
+      try {
+        tempView.close?.()
+      } catch (e) {
+        console.warn('Could not close temp view:', e)
+      }
+      if (tempView.parentNode) {
+        tempView.parentNode.removeChild(tempView)
+      }
 
       // Store references
       readerStore.setBook(paneIndex, book.value, 'epub')
