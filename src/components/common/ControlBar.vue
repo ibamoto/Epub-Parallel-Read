@@ -52,6 +52,34 @@
         </div>
       </div>
 
+      <!-- Left Pane Scroll Amount -->
+      <div class="scroll-amount-control">
+        <label title="左ペインのスクロール量 (px)">⇅</label>
+        <input
+          type="number"
+          :value="settingsStore.scrollAmounts[0]"
+          @input="updateScrollAmount(0, $event)"
+          min="10"
+          max="1000"
+          step="10"
+          title="左ペインのスクロール量 (px)"
+        />
+      </div>
+
+      <!-- Right Pane Scroll Amount -->
+      <div class="scroll-amount-control right">
+        <input
+          type="number"
+          :value="settingsStore.scrollAmounts[1]"
+          @input="updateScrollAmount(1, $event)"
+          min="10"
+          max="1000"
+          step="10"
+          title="右ペインのスクロール量 (px)"
+        />
+        <label title="右ペインのスクロール量 (px)">⇅</label>
+      </div>
+
       <!-- Right Pane Button with History -->
       <div class="file-button-wrapper right-pane" ref="rightButtonWrapper">
         <button class="file-input-label" @click="toggleDropdown(1)">
@@ -180,6 +208,14 @@ async function deleteHistoryItem(id) {
     console.error('Failed to delete history item:', error)
   }
 }
+
+// Update scroll amount
+function updateScrollAmount(paneIndex, event) {
+  const value = parseInt(event.target.value, 10)
+  if (!isNaN(value) && value >= 10 && value <= 1000) {
+    settingsStore.scrollAmounts[paneIndex] = value
+  }
+}
 </script>
 
 <style scoped>
@@ -283,7 +319,55 @@ async function deleteHistoryItem(id) {
 }
 
 .file-button-wrapper.right-pane {
+  margin-left: 0;
+}
+
+.scroll-amount-control {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+}
+
+.scroll-amount-control.right {
   margin-left: auto;
+}
+
+.scroll-amount-control label {
+  font-size: 0.9rem;
+  color: var(--text-secondary);
+  cursor: default;
+}
+
+.scroll-amount-control input {
+  width: 60px;
+  padding: 0.3rem 0.4rem;
+  border: 1px solid var(--border-color);
+  border-radius: 4px;
+  background: var(--bg-tertiary);
+  color: var(--text-primary);
+  font-size: 0.8rem;
+  text-align: center;
+}
+
+.scroll-amount-control input:hover {
+  border-color: var(--accent-color);
+}
+
+.scroll-amount-control input:focus {
+  outline: none;
+  border-color: var(--accent-color);
+  box-shadow: 0 0 0 2px var(--accent-light);
+}
+
+/* Hide number input spinners */
+.scroll-amount-control input::-webkit-outer-spin-button,
+.scroll-amount-control input::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
+.scroll-amount-control input[type=number] {
+  -moz-appearance: textfield;
 }
 
 .file-input-label {

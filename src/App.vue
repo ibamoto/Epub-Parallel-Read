@@ -221,19 +221,20 @@ function handleKeyDown(event) {
       event.preventDefault()
       const fileType1 = readerStore.fileTypes[0]
       const fileType2 = readerStore.fileTypes[1]
-      const scrollDistance = 100 // pixels for EPUB scroll
+      const scrollDistance1 = settingsStore.scrollAmounts[0] // Left pane scroll amount
+      const scrollDistance2 = settingsStore.scrollAmounts[1] // Right pane scroll amount
 
       if (event.key === 'ArrowUp') {
         // EPUB: scroll up, PDF: previous page
-        if (fileType1 === 'epub') reader1.value?.scrollBy?.(-scrollDistance)
+        if (fileType1 === 'epub') reader1.value?.scrollBy?.(-scrollDistance1)
         if (fileType1 === 'pdf') reader1.value?.prev?.()
-        if (fileType2 === 'epub') reader2.value?.scrollBy?.(-scrollDistance)
+        if (fileType2 === 'epub') reader2.value?.scrollBy?.(-scrollDistance2)
         if (fileType2 === 'pdf') reader2.value?.prev?.()
       } else {
         // EPUB: scroll down, PDF: next page
-        if (fileType1 === 'epub') reader1.value?.scrollBy?.(scrollDistance)
+        if (fileType1 === 'epub') reader1.value?.scrollBy?.(scrollDistance1)
         if (fileType1 === 'pdf') reader1.value?.next?.()
-        if (fileType2 === 'epub') reader2.value?.scrollBy?.(scrollDistance)
+        if (fileType2 === 'epub') reader2.value?.scrollBy?.(scrollDistance2)
         if (fileType2 === 'pdf') reader2.value?.next?.()
       }
     }
