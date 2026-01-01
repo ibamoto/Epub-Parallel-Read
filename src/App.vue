@@ -128,6 +128,7 @@ async function handleHistorySelect(paneIndex, file) {
 
 // Handle scroll sync
 function handleScroll(sourceIndex) {
+  console.log('[Scroll Sync] handleScroll called, sourceIndex:', sourceIndex, 'syncMode:', settingsStore.syncMode, 'isSyncing:', isSyncing)
   if (!settingsStore.syncMode || isSyncing) return
 
   isSyncing = true
@@ -136,7 +137,9 @@ function handleScroll(sourceIndex) {
   const target = sourceIndex === 0 ? reader2.value : reader1.value
 
   const scrollInfo = source?.getScrollInfo?.()
+  console.log('[Scroll Sync] scrollInfo:', scrollInfo)
   if (scrollInfo && target?.setScrollByRatio) {
+    console.log('[Scroll Sync] Setting target scroll ratio:', scrollInfo.scrollRatio * settingsStore.syncSensitivity)
     target.setScrollByRatio(scrollInfo.scrollRatio * settingsStore.syncSensitivity)
   }
 

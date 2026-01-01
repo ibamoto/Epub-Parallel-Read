@@ -24,6 +24,7 @@ export function useEpubReader(paneIndex) {
   const sections = ref([])
   const currentSectionIndex = ref(0)
   const blobUrls = ref([]) // Track blob URLs for cleanup
+  let onScrollCallback = null // Callback for scroll events
 
   // Process TOC to flat structure
   function processToc(toc) {
@@ -212,6 +213,9 @@ export function useEpubReader(paneIndex) {
       contentWrapper.value.className = `epub-content-${paneIndex}`
       containerRef.value.appendChild(contentWrapper.value)
 
+      // Add scroll event listener for sync
+      contentWrapper.value.addEventListener('scroll', handleScrollEvent)
+
       // Load all sections and render them
       console.log(`Loading ${sections.value.length} sections...`)
       for (let i = 0; i < sections.value.length; i++) {
@@ -354,6 +358,18 @@ export function useEpubReader(paneIndex) {
     // Native scrolling handles resize automatically
   }
 
+  // Handle scroll event and call callback
+  function handleScrollEvent() {
+    if (onScrollCallback) {
+      onScrollCallback()
+    }
+  }
+
+  // Set scroll callback for sync
+  function setOnScroll(callback) {
+    onScrollCallback = callback
+  }
+
   // Get scroll info for sync
   function getScrollInfo() {
     if (!contentWrapper.value) return null
@@ -417,6 +433,7 @@ export function useEpubReader(paneIndex) {
     applySettings,
     getScrollInfo,
     setScrollByRatio,
+    setOnScroll,
     cleanup,
   }
 }
