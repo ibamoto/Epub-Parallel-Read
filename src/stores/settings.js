@@ -31,6 +31,9 @@ export const useSettingsStore = defineStore('settings', () => {
   const showControls = ref(true)
   const syncSensitivity = ref(1.0)
 
+  // Per-pane scroll amount (in pixels)
+  const scrollAmounts = ref([100, 100])
+
   // Theme settings
   const theme = ref('light') // 'light' | 'dark' | 'sepia' | 'custom'
   const customColors = ref({
@@ -65,6 +68,7 @@ export const useSettingsStore = defineStore('settings', () => {
         showControls.value = parsed.showControls ?? true
         syncSensitivity.value = parsed.syncSensitivity ?? 1.0
         theme.value = parsed.theme ?? 'light'
+        scrollAmounts.value = parsed.scrollAmounts ?? [100, 100]
 
         if (parsed.customColors) {
           customColors.value = { ...customColors.value, ...parsed.customColors }
@@ -93,6 +97,7 @@ export const useSettingsStore = defineStore('settings', () => {
         theme: theme.value,
         customColors: customColors.value,
         paneSettings: paneSettings.value,
+        scrollAmounts: scrollAmounts.value,
       }
       localStorage.setItem(STORAGE_KEY, JSON.stringify(data))
     } catch (error) {
@@ -166,7 +171,7 @@ export const useSettingsStore = defineStore('settings', () => {
   }
 
   // Auto-save on changes
-  watch([isDarkMode, syncMode, showControls, syncSensitivity, theme, customColors, paneSettings], () => {
+  watch([isDarkMode, syncMode, showControls, syncSensitivity, theme, customColors, paneSettings, scrollAmounts], () => {
     saveSettings()
   }, { deep: true })
 
@@ -180,6 +185,7 @@ export const useSettingsStore = defineStore('settings', () => {
     customColors,
     paneSettings,
     fontOptions,
+    scrollAmounts,
 
     // Actions
     loadSettings,
