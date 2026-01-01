@@ -18,160 +18,70 @@ export function usePdfReader(paneIndex) {
   const totalPages = ref(0)
   const scale = ref(1.5)
   const isReady = ref(false)
-  const renderedPages = ref(new Map())
-  const renderingPages = new Set() // Track pages currently being rendered
 
-  // For lazy loading
-  let intersectionObserver = null
-  let pageHeights = new Map() // Cache page heights for placeholders
-  const BUFFER_PAGES = 2 // Render current page ± this many pages
+  // Single canvas for current page display
+  let pageCanvas = null
 
-  // Create canvas for a page
-  function createPageCanvas(pageNum) {
-    const canvas = document.createElement('canvas')
-    canvas.className = 'pdf-page'
-    canvas.dataset.page = pageNum
-    return canvas
-  }
-
-  // Render a single page
-  async function renderPage(pageNum, canvas) {
-    if (!pdf.value) return
-
-    // Skip if already rendering this page
-    if (renderingPages.has(pageNum)) {
-      return
-    }
-
-    // Mark as rendering
-    renderingPages.add(pageNum)
+  // Render the current page to canvas
+  async function renderCurrentPage() {
+    if (!pdf.value || !pageCanvas) return
 
     try {
-      const page = await pdf.value.getPage(pageNum)
+      const page = await pdf.value.getPage(currentPage.value)
       const viewport = page.getViewport({ scale: scale.value })
 
-      canvas.width = viewport.width
-      canvas.height = viewport.height
-      canvas.style.width = '100%'
-      canvas.style.height = 'auto'
-      canvas.style.display = 'block'
-      canvas.style.marginBottom = '10px'
+      pageCanvas.width = viewport.width
+      pageCanvas.height = viewport.height
 
-      const context = canvas.getContext('2d')
+      const context = pageCanvas.getContext('2d')
 
       // Apply theme background
       const colors = settingsStore.getThemeColors()
       context.fillStyle = colors.background
-      context.fillRect(0, 0, canvas.width, canvas.height)
+      context.fillRect(0, 0, pageCanvas.width, pageCanvas.height)
 
       await page.render({
         canvasContext: context,
         viewport: viewport,
       }).promise
-
-      renderedPages.value.set(pageNum, true)
     } catch (error) {
-      console.error(`[PDF] Error rendering page ${pageNum}:`, error)
-    } finally {
-      // Remove from rendering set
-      renderingPages.delete(pageNum)
+      console.error(`[PDF] Error rendering page ${currentPage.value}:`, error)
     }
   }
 
-  // Get page dimensions (cached)
-  async function getPageDimensions(pageNum) {
-    if (pageHeights.has(pageNum)) {
-      return pageHeights.get(pageNum)
-    }
-    const page = await pdf.value.getPage(pageNum)
-    const viewport = page.getViewport({ scale: scale.value })
-    const dimensions = { width: viewport.width, height: viewport.height }
-    pageHeights.set(pageNum, dimensions)
-    return dimensions
-  }
-
-  // Create placeholder canvases for all pages (without rendering)
-  async function createPagePlaceholders() {
-    if (!pdf.value || !containerRef.value) {
-      return
-    }
+  // Setup container for single page display
+  function setupContainer() {
+    if (!containerRef.value) return
 
     const container = containerRef.value
     container.innerHTML = ''
-    renderedPages.value.clear()
 
-    const fragment = document.createDocumentFragment()
+    // Set container layout for single page display
+    container.style.cssText = `
+      overflow: hidden;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex: 1;
+      min-height: 0;
+      padding: 16px;
+      background: var(--bg-secondary, #f0f0f0);
+    `
 
-    // Get first page dimensions to estimate others (faster than getting all)
-    const firstPageDims = await getPageDimensions(1)
-
-    for (let i = 1; i <= totalPages.value; i++) {
-      const canvas = createPageCanvas(i)
-      // Set placeholder size (use first page dimensions as estimate)
-      canvas.width = firstPageDims.width
-      canvas.height = firstPageDims.height
-      canvas.style.width = '100%'
-      canvas.style.height = 'auto'
-      canvas.style.display = 'block'
-      canvas.style.marginBottom = '10px'
-      // Add loading indicator style
-      canvas.style.backgroundColor = '#f0f0f0'
-      fragment.appendChild(canvas)
-    }
-
-    container.appendChild(fragment)
-  }
-
-  // Setup IntersectionObserver for lazy loading
-  function setupIntersectionObserver() {
-    if (intersectionObserver) {
-      intersectionObserver.disconnect()
-    }
-
-    if (!containerRef.value) return
-
-    const options = {
-      root: containerRef.value,
-      rootMargin: '200px 0px', // Pre-load pages 200px before they become visible
-      threshold: 0
-    }
-
-    intersectionObserver = new IntersectionObserver((entries) => {
-      for (const entry of entries) {
-        if (entry.isIntersecting) {
-          const pageNum = parseInt(entry.target.dataset.page, 10)
-          renderPageWithBuffer(pageNum)
-        }
-      }
-    }, options)
-
-    // Observe all canvas elements
-    const canvases = containerRef.value.querySelectorAll('canvas')
-    canvases.forEach(canvas => intersectionObserver.observe(canvas))
-  }
-
-  // Render a page and its buffer pages
-  async function renderPageWithBuffer(centerPage) {
-    const startPage = Math.max(1, centerPage - BUFFER_PAGES)
-    const endPage = Math.min(totalPages.value, centerPage + BUFFER_PAGES)
-
-    const container = containerRef.value
-    if (!container) return
-
-    for (let pageNum = startPage; pageNum <= endPage; pageNum++) {
-      // Skip already rendered pages
-      if (renderedPages.value.get(pageNum)) continue
-
-      const canvas = container.querySelector(`canvas[data-page="${pageNum}"]`)
-      if (canvas) {
-        await renderPage(pageNum, canvas)
-      }
-    }
-  }
-
-  // Render initial visible pages (first page + buffer)
-  async function renderInitialPages() {
-    await renderPageWithBuffer(1)
+    // Create single canvas for page display
+    pageCanvas = document.createElement('canvas')
+    pageCanvas.className = 'pdf-page'
+    pageCanvas.style.cssText = `
+      display: block;
+      max-height: 100%;
+      max-width: 100%;
+      width: auto;
+      height: auto;
+      object-fit: contain;
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+      border-radius: 2px;
+    `
+    container.appendChild(pageCanvas)
   }
 
   // Generate TOC from PDF outline
@@ -259,26 +169,21 @@ export function usePdfReader(paneIndex) {
       const toc = await generateToc()
       readerStore.setToc(paneIndex, toc)
 
-      // Create placeholders for all pages (fast)
-      await createPagePlaceholders()
-
-      // Setup lazy loading observer
-      setupIntersectionObserver()
-
-      // Render only initial visible pages (fast)
-      await renderInitialPages()
+      // Setup container with single canvas
+      setupContainer()
 
       // Restore saved position
       const savedPage = readerStore.currentPages[paneIndex]
       if (savedPage && savedPage <= totalPages.value) {
-        goToPage(savedPage)
+        currentPage.value = savedPage
       }
 
-      // Setup wheel event handler for scroll mode
-      setupWheelHandler()
+      // Render the current page
+      await renderCurrentPage()
+      readerStore.setCurrentPage(paneIndex, currentPage.value)
 
-      // Apply initial page visibility based on scroll mode
-      updatePageVisibility()
+      // Setup wheel event handler
+      setupWheelHandler()
 
       isReady.value = true
 
@@ -291,60 +196,14 @@ export function usePdfReader(paneIndex) {
     }
   }
 
-  // Update page visibility - show only current page centered with page-like appearance
-  function updatePageVisibility() {
-    if (!containerRef.value) return
-
-    const canvases = containerRef.value.querySelectorAll('canvas')
-    const container = containerRef.value
-
-    // Set container layout for single page display
-    container.style.cssText = `
-      overflow: hidden;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      flex: 1;
-      min-height: 0;
-      padding: 16px;
-      background: var(--bg-secondary, #f0f0f0);
-    `
-
-    canvases.forEach((canvas) => {
-      const pageNum = parseInt(canvas.dataset.page, 10)
-      // Show only current page, centered and fit to container with page-like shadow
-      if (pageNum === currentPage.value) {
-        canvas.style.cssText = `
-          display: block;
-          max-height: 100%;
-          max-width: 100%;
-          width: auto;
-          height: auto;
-          object-fit: contain;
-          box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
-          border-radius: 2px;
-        `
-      } else {
-        canvas.style.display = 'none'
-      }
-    })
-  }
-
   // Go to specific page
-  function goToPage(pageNum) {
-    if (!containerRef.value || pageNum < 1 || pageNum > totalPages.value) return
+  async function goToPage(pageNum) {
+    if (!pdf.value || pageNum < 1 || pageNum > totalPages.value) return
+    if (pageNum === currentPage.value) return
 
-    const canvas = containerRef.value.querySelector(`canvas[data-page="${pageNum}"]`)
-    if (canvas) {
-      // Ensure the target page and surrounding pages are rendered
-      renderPageWithBuffer(pageNum)
-
-      currentPage.value = pageNum
-      readerStore.setCurrentPage(paneIndex, pageNum)
-
-      // Update display to show only this page
-      updatePageVisibility()
-    }
+    currentPage.value = pageNum
+    readerStore.setCurrentPage(paneIndex, pageNum)
+    await renderCurrentPage()
   }
 
   // Navigate to TOC item
@@ -369,19 +228,10 @@ export function usePdfReader(paneIndex) {
     }
   }
 
-  // Set scale and re-render visible pages
+  // Set scale and re-render
   async function setScale(newScale) {
     scale.value = newScale
-    // Clear cached page heights (they depend on scale)
-    pageHeights.clear()
-    // Clear rendered pages to force re-render
-    renderedPages.value.clear()
-    // Recreate placeholders with new scale
-    await createPagePlaceholders()
-    // Re-setup observer
-    setupIntersectionObserver()
-    // Re-render current visible pages
-    await renderPageWithBuffer(currentPage.value)
+    await renderCurrentPage()
   }
 
   // Wheel event handler reference for cleanup
@@ -440,12 +290,6 @@ export function usePdfReader(paneIndex) {
 
   // Cleanup
   function cleanup() {
-    // Remove IntersectionObserver
-    if (intersectionObserver) {
-      intersectionObserver.disconnect()
-      intersectionObserver = null
-    }
-
     // Remove wheel handler
     if (wheelHandler && containerRef.value) {
       containerRef.value.removeEventListener('wheel', wheelHandler)
@@ -456,16 +300,14 @@ export function usePdfReader(paneIndex) {
       pdf.value.destroy()
       pdf.value = null
     }
-    renderedPages.value.clear()
-    renderingPages.clear()
-    pageHeights.clear()
+
+    pageCanvas = null
     totalPages.value = 0
     currentPage.value = 1
     isReady.value = false
 
     if (containerRef.value) {
       containerRef.value.innerHTML = ''
-      // Reset container styles that were set for PDF display
       containerRef.value.style.cssText = ''
     }
   }
