@@ -438,6 +438,33 @@ function updatePdfPageAmount(paneIndex, event) {
   -moz-appearance: textfield;
 }
 
+.scroll-btn {
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border: 1px solid var(--border-color);
+  border-radius: 4px;
+  background: var(--bg-tertiary);
+  color: var(--text-primary);
+  font-size: 0.9rem;
+  font-weight: 500;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.15s;
+  user-select: none;
+}
+
+.scroll-btn:hover {
+  background: var(--bg-hover);
+  border-color: var(--accent-color);
+}
+
+.scroll-btn:active {
+  background: var(--accent-light);
+}
+
 .file-input-label {
   display: flex;
   align-items: center;
