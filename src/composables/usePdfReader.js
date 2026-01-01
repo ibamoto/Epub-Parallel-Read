@@ -478,6 +478,8 @@ export function usePdfReader(paneIndex) {
 
     if (containerRef.value) {
       containerRef.value.innerHTML = ''
+      // Reset container styles that were set for PDF display
+      containerRef.value.style.cssText = ''
     }
   }
 

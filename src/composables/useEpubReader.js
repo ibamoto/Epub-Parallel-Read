@@ -386,9 +386,10 @@ export function useEpubReader(paneIndex) {
       styleElement.value = null
     }
 
-    // Clear container
+    // Clear container and reset styles
     if (containerRef.value) {
       containerRef.value.innerHTML = ''
+      containerRef.value.style.cssText = ''
     }
 
     contentWrapper.value = null
