@@ -206,21 +206,25 @@ function handleKeyDown(event) {
       reader1.value?.next?.()
       reader2.value?.next?.()
     }
-    // Up/Down arrows: page navigation for PDF only (EPUB uses native scroll)
+    // Up/Down arrows: scroll for EPUB, page navigation for PDF
     else if (event.key === 'ArrowUp' || event.key === 'ArrowDown') {
+      event.preventDefault()
       const fileType1 = readerStore.fileTypes[0]
       const fileType2 = readerStore.fileTypes[1]
+      const scrollDistance = 100 // pixels for EPUB scroll
 
-      // Only handle for PDF - let EPUB use native scroll
-      if (fileType1 === 'pdf' || fileType2 === 'pdf') {
-        event.preventDefault()
-        if (event.key === 'ArrowUp') {
-          if (fileType1 === 'pdf') reader1.value?.prev?.()
-          if (fileType2 === 'pdf') reader2.value?.prev?.()
-        } else {
-          if (fileType1 === 'pdf') reader1.value?.next?.()
-          if (fileType2 === 'pdf') reader2.value?.next?.()
-        }
+      if (event.key === 'ArrowUp') {
+        // EPUB: scroll up, PDF: previous page
+        if (fileType1 === 'epub') reader1.value?.scrollBy?.(-scrollDistance)
+        if (fileType1 === 'pdf') reader1.value?.prev?.()
+        if (fileType2 === 'epub') reader2.value?.scrollBy?.(-scrollDistance)
+        if (fileType2 === 'pdf') reader2.value?.prev?.()
+      } else {
+        // EPUB: scroll down, PDF: next page
+        if (fileType1 === 'epub') reader1.value?.scrollBy?.(scrollDistance)
+        if (fileType1 === 'pdf') reader1.value?.next?.()
+        if (fileType2 === 'epub') reader2.value?.scrollBy?.(scrollDistance)
+        if (fileType2 === 'pdf') reader2.value?.next?.()
       }
     }
   }

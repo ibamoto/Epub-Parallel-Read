@@ -229,6 +229,7 @@ defineExpose({
   resize: () => activeReader.value?.resize?.(),
   next: () => activeReader.value?.next?.(),
   prev: () => activeReader.value?.prev?.(),
+  scrollBy: (distance) => epubReader.scrollBy?.(distance),
 });
 
 // Cleanup
