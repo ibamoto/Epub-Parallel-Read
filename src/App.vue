@@ -196,6 +196,7 @@ function handleKeyDown(event) {
 
   // Arrow keys for navigation when sync mode is on
   if (settingsStore.syncMode) {
+    // Left/Right arrows: page navigation for both EPUB and PDF
     if (event.key === 'ArrowLeft') {
       event.preventDefault()
       reader1.value?.prev?.()
@@ -204,6 +205,23 @@ function handleKeyDown(event) {
       event.preventDefault()
       reader1.value?.next?.()
       reader2.value?.next?.()
+    }
+    // Up/Down arrows: page navigation for PDF only (EPUB uses native scroll)
+    else if (event.key === 'ArrowUp' || event.key === 'ArrowDown') {
+      const fileType1 = readerStore.fileTypes[0]
+      const fileType2 = readerStore.fileTypes[1]
+
+      // Only handle for PDF - let EPUB use native scroll
+      if (fileType1 === 'pdf' || fileType2 === 'pdf') {
+        event.preventDefault()
+        if (event.key === 'ArrowUp') {
+          if (fileType1 === 'pdf') reader1.value?.prev?.()
+          if (fileType2 === 'pdf') reader2.value?.prev?.()
+        } else {
+          if (fileType1 === 'pdf') reader1.value?.next?.()
+          if (fileType2 === 'pdf') reader2.value?.next?.()
+        }
+      }
     }
   }
 }

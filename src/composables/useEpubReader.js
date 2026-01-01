@@ -208,35 +208,8 @@ export function useEpubReader(paneIndex) {
         injectContentStyles()
       })
 
-      // Handle wheel events for page navigation
-      // Note: foliate-js does not support continuous scrolling, only pagination
-      let wheelDebounce = null
-      const wheelHandler = (e) => {
-        e.preventDefault()
-        e.stopPropagation()
-
-        // Debounce to prevent too rapid page changes
-        if (wheelDebounce) return
-        wheelDebounce = setTimeout(() => {
-          wheelDebounce = null
-        }, 250)
-
-        if (e.deltaY > 0) {
-          next()
-        } else if (e.deltaY < 0) {
-          prev()
-        }
-
-        // Dispatch a custom event for scroll sync
-        containerRef.value?.dispatchEvent(new CustomEvent('epub-wheel', {
-          bubbles: true,
-          detail: { deltaY: e.deltaY, deltaX: e.deltaX }
-        }))
-      }
-
-      // Add wheel listener to both wrapper and foliate-view with capture phase
-      wrapper.addEventListener('wheel', wheelHandler, { passive: false, capture: true })
-      foliateView.addEventListener('wheel', wheelHandler, { passive: false, capture: true })
+      // Enable scrolled mode for continuous scrolling with mouse wheel and arrow keys
+      foliateView.setAttribute('flow', 'scrolled')
 
       // Initialize view
       await foliateView.init({ showTextStart: true })
