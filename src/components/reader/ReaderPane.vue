@@ -190,6 +190,7 @@ defineExpose({
   next: () => activeReader.value?.next?.(),
   prev: () => activeReader.value?.prev?.(),
   scrollBy: (distance) => epubReader.scrollBy?.(distance),
+  pageBy: (pages) => pdfReader.goToPage?.(pdfReader.currentPage.value + pages),
   applySettings: () => {
     if (readerStore.fileTypes[props.paneIndex] === 'epub') {
       epubReader.applyTheme()
