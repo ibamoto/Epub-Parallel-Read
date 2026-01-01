@@ -1,4 +1,4 @@
-import { ref, shallowRef, onUnmounted, watch } from 'vue'
+import { ref, shallowRef, onUnmounted } from 'vue'
 import * as pdfjsLib from 'pdfjs-dist'
 import pdfWorkerUrl from 'pdfjs-dist/build/pdf.worker.min.mjs?url'
 import { useReaderStore } from '../stores/reader'
@@ -10,16 +10,6 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = pdfWorkerUrl
 export function usePdfReader(paneIndex) {
   const readerStore = useReaderStore()
   const settingsStore = useSettingsStore()
-
-  // Watch for scroll mode changes
-  watch(
-    () => settingsStore.paneSettings[paneIndex]?.epubScrollMode,
-    (newMode) => {
-      if (isReady.value && containerRef.value) {
-        updatePageVisibility()
-      }
-    }
-  )
 
   const containerRef = ref(null)
   // Use shallowRef to avoid Vue's Proxy wrapping pdfjs objects (causes private field access errors)
@@ -320,60 +310,38 @@ export function usePdfReader(paneIndex) {
     }
   }
 
-  // Update page visibility based on scroll mode
+  // Update page visibility - show only current page centered
   function updatePageVisibility() {
     if (!containerRef.value) return
 
-    const settings = settingsStore.paneSettings[paneIndex]
-    const isPageMode = settings.epubScrollMode === 'page'
     const canvases = containerRef.value.querySelectorAll('canvas')
     const container = containerRef.value
 
-    // Adjust container layout first
-    if (isPageMode) {
-      container.style.cssText = `
-        overflow: hidden;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        flex: 1;
-        min-height: 0;
-        background: var(--bg-primary);
-      `
-    } else {
-      container.style.cssText = `
-        overflow-y: auto;
-        display: block;
-        flex: 1;
-        min-height: 0;
-        background: var(--bg-primary);
-      `
-    }
+    // Set container layout for single page display
+    container.style.cssText = `
+      overflow: hidden;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex: 1;
+      min-height: 0;
+      background: var(--bg-primary);
+    `
 
     canvases.forEach((canvas) => {
       const pageNum = parseInt(canvas.dataset.page, 10)
-      if (isPageMode) {
-        // Page mode: show only current page, centered and fit to container
-        if (pageNum === currentPage.value) {
-          canvas.style.cssText = `
-            display: block;
-            max-height: 100%;
-            max-width: 100%;
-            width: auto;
-            height: auto;
-            object-fit: contain;
-          `
-        } else {
-          canvas.style.display = 'none'
-        }
-      } else {
-        // Continuous mode: show all pages with margin
+      // Show only current page, centered and fit to container
+      if (pageNum === currentPage.value) {
         canvas.style.cssText = `
           display: block;
-          margin: 0 auto 10px auto;
-          width: 100%;
+          max-height: 100%;
+          max-width: 100%;
+          width: auto;
           height: auto;
+          object-fit: contain;
         `
+      } else {
+        canvas.style.display = 'none'
       }
     })
   }
@@ -390,14 +358,8 @@ export function usePdfReader(paneIndex) {
       currentPage.value = pageNum
       readerStore.setCurrentPage(paneIndex, pageNum)
 
-      const settings = settingsStore.paneSettings[paneIndex]
-      if (settings.epubScrollMode === 'page') {
-        // Page mode: show only this page
-        updatePageVisibility()
-      } else {
-        // Continuous mode: scroll to page
-        canvas.scrollIntoView({ behavior: 'smooth', block: 'start' })
-      }
+      // Update display to show only this page
+      updatePageVisibility()
     }
   }
 
@@ -423,30 +385,6 @@ export function usePdfReader(paneIndex) {
     }
   }
 
-  // Update current page based on scroll position
-  function updateCurrentPage() {
-    if (!containerRef.value) return
-
-    const container = containerRef.value
-    const canvases = container.querySelectorAll('canvas')
-    const containerRect = container.getBoundingClientRect()
-    const containerTop = container.scrollTop
-
-    for (const canvas of canvases) {
-      const canvasTop = canvas.offsetTop
-      const canvasBottom = canvasTop + canvas.offsetHeight
-
-      if (canvasTop <= containerTop + 100 && canvasBottom > containerTop) {
-        const pageNum = parseInt(canvas.dataset.page, 10)
-        if (pageNum !== currentPage.value) {
-          currentPage.value = pageNum
-          readerStore.setCurrentPage(paneIndex, pageNum)
-        }
-        break
-      }
-    }
-  }
-
   // Set scale and re-render visible pages
   async function setScale(newScale) {
     scale.value = newScale
@@ -465,7 +403,7 @@ export function usePdfReader(paneIndex) {
   // Wheel event handler reference for cleanup
   let wheelHandler = null
 
-  // Setup wheel event handler for scroll mode
+  // Setup wheel event handler for page navigation
   function setupWheelHandler() {
     if (!containerRef.value) return
 
@@ -475,31 +413,18 @@ export function usePdfReader(paneIndex) {
     }
 
     wheelHandler = (e) => {
-      const settings = settingsStore.paneSettings[paneIndex]
+      e.preventDefault()
 
-      if (settings.epubScrollMode === 'page') {
-        // Page mode: scroll by page on wheel
-        e.preventDefault()
+      // Debounce to prevent too rapid page changes
+      if (wheelHandler.lastTime && Date.now() - wheelHandler.lastTime < 250) {
+        return
+      }
+      wheelHandler.lastTime = Date.now()
 
-        // Debounce to prevent too rapid page changes
-        if (wheelHandler.lastTime && Date.now() - wheelHandler.lastTime < 300) {
-          return
-        }
-        wheelHandler.lastTime = Date.now()
-
-        if (e.deltaY > 0) {
-          next()
-        } else if (e.deltaY < 0) {
-          prev()
-        }
-      } else {
-        // Continuous mode: apply speed adjustment
-        if (settings.epubScrollSpeed !== 1.0) {
-          e.preventDefault()
-          const scrollAmount = e.deltaY * settings.epubScrollSpeed
-          containerRef.value.scrollTop += scrollAmount
-        }
-        // If speed is 1.0, let default scroll behavior happen
+      if (e.deltaY > 0) {
+        next()
+      } else if (e.deltaY < 0) {
+        prev()
       }
     }
 
@@ -574,7 +499,6 @@ export function usePdfReader(paneIndex) {
     next,
     prev,
     setScale,
-    updateCurrentPage,
     getScrollInfo,
     setScrollByRatio,
     cleanup,

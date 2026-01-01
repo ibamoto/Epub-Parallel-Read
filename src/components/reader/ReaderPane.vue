@@ -69,34 +69,6 @@
       <button @click="handlePrev">← 前へ</button>
       <button @click="handleNext">次へ →</button>
 
-      <!-- Scroll Controls -->
-      <div class="scroll-controls">
-        <div class="scroll-mode-toggle">
-          <button
-            :class="{ active: paneSettings.epubScrollMode === 'page' }"
-            @click="updateScrollMode('page')"
-            title="ページモード"
-          >頁</button>
-          <button
-            :class="{ active: paneSettings.epubScrollMode === 'continuous' }"
-            @click="updateScrollMode('continuous')"
-            title="連続モード"
-          >続</button>
-        </div>
-        <div v-if="paneSettings.epubScrollMode === 'continuous'" class="scroll-speed">
-          <input
-            type="range"
-            :value="paneSettings.epubScrollSpeed"
-            min="0.5"
-            max="3"
-            step="0.1"
-            @input="updateScrollSpeed($event.target.value)"
-            title="スクロール速度"
-          />
-          <span class="speed-value">{{ paneSettings.epubScrollSpeed.toFixed(1) }}x</span>
-        </div>
-      </div>
-
       <span v-if="fileInfo" class="file-info">{{ fileInfo }}</span>
     </div>
 
@@ -154,19 +126,6 @@ const activeReader = computed(() => {
 const hasContent = computed(() => {
   return readerStore.books[props.paneIndex] !== null;
 });
-
-// Get pane settings for scroll controls
-const paneSettings = computed(() => settingsStore.paneSettings[props.paneIndex]);
-
-// Update scroll mode
-function updateScrollMode(mode) {
-  settingsStore.updatePaneSettings(props.paneIndex, { epubScrollMode: mode });
-}
-
-// Update scroll speed
-function updateScrollSpeed(speed) {
-  settingsStore.updatePaneSettings(props.paneIndex, { epubScrollSpeed: parseFloat(speed) });
-}
 
 const fileInfo = computed(() => {
   const name = readerStore.fileNames[props.paneIndex];
@@ -251,9 +210,6 @@ function handlePrev() {
 
 // Handle scroll
 function handleScroll() {
-  if (readerStore.fileTypes[props.paneIndex] === "pdf") {
-    pdfReader.updateCurrentPage();
-  }
   emit("scroll", props.paneIndex);
 }
 
@@ -443,80 +399,6 @@ onUnmounted(() => {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-}
-
-/* Scroll Controls */
-.scroll-controls {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  margin-left: 0.5rem;
-  padding-left: 0.5rem;
-  border-left: 1px solid var(--border-color);
-}
-
-.scroll-mode-toggle {
-  display: flex;
-}
-
-.scroll-mode-toggle button {
-  padding: 0.35rem 0.5rem;
-  border: 1px solid var(--border-color);
-  background: var(--bg-primary);
-  color: var(--text-secondary);
-  cursor: pointer;
-  font-size: 0.75rem;
-  transition: all 0.15s;
-}
-
-.scroll-mode-toggle button:first-child {
-  border-radius: 4px 0 0 4px;
-}
-
-.scroll-mode-toggle button:last-child {
-  border-radius: 0 4px 4px 0;
-  border-left: none;
-}
-
-.scroll-mode-toggle button:hover {
-  background: var(--bg-hover);
-}
-
-.scroll-mode-toggle button.active {
-  background: var(--accent-color);
-  color: white;
-  border-color: var(--accent-color);
-}
-
-.scroll-speed {
-  display: flex;
-  align-items: center;
-  gap: 0.25rem;
-}
-
-.scroll-speed input[type="range"] {
-  width: 60px;
-  height: 4px;
-  -webkit-appearance: none;
-  background: var(--border-color);
-  border-radius: 2px;
-  outline: none;
-}
-
-.scroll-speed input[type="range"]::-webkit-slider-thumb {
-  -webkit-appearance: none;
-  width: 12px;
-  height: 12px;
-  background: var(--accent-color);
-  border-radius: 50%;
-  cursor: pointer;
-}
-
-.speed-value {
-  font-size: 0.7rem;
-  color: var(--text-tertiary);
-  min-width: 28px;
-  font-family: monospace;
 }
 
 /* PDF specific styles */
