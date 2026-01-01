@@ -40,7 +40,6 @@ export function usePdfReader(paneIndex) {
 
     // Skip if already rendering this page
     if (renderingPages.has(pageNum)) {
-      console.log(`[PDF] Page ${pageNum} is already being rendered, skipping`)
       return
     }
 
@@ -48,10 +47,8 @@ export function usePdfReader(paneIndex) {
     renderingPages.add(pageNum)
 
     try {
-      console.log(`[PDF] Rendering page ${pageNum}...`)
       const page = await pdf.value.getPage(pageNum)
       const viewport = page.getViewport({ scale: scale.value })
-      console.log(`[PDF] Page ${pageNum} viewport:`, viewport.width, 'x', viewport.height)
 
       canvas.width = viewport.width
       canvas.height = viewport.height
@@ -72,7 +69,6 @@ export function usePdfReader(paneIndex) {
         viewport: viewport,
       }).promise
 
-      console.log(`[PDF] Page ${pageNum} rendered successfully`)
       renderedPages.value.set(pageNum, true)
     } catch (error) {
       console.error(`[PDF] Error rendering page ${pageNum}:`, error)
@@ -96,9 +92,7 @@ export function usePdfReader(paneIndex) {
 
   // Create placeholder canvases for all pages (without rendering)
   async function createPagePlaceholders() {
-    console.log('[PDF] createPagePlaceholders called')
     if (!pdf.value || !containerRef.value) {
-      console.log('[PDF] createPagePlaceholders aborted - missing pdf or container')
       return
     }
 
@@ -107,7 +101,6 @@ export function usePdfReader(paneIndex) {
     renderedPages.value.clear()
 
     const fragment = document.createDocumentFragment()
-    console.log('[PDF] Creating', totalPages.value, 'placeholder canvas elements')
 
     // Get first page dimensions to estimate others (faster than getting all)
     const firstPageDims = await getPageDimensions(1)
@@ -127,7 +120,6 @@ export function usePdfReader(paneIndex) {
     }
 
     container.appendChild(fragment)
-    console.log('[PDF] Placeholders created')
   }
 
   // Setup IntersectionObserver for lazy loading
@@ -156,7 +148,6 @@ export function usePdfReader(paneIndex) {
     // Observe all canvas elements
     const canvases = containerRef.value.querySelectorAll('canvas')
     canvases.forEach(canvas => intersectionObserver.observe(canvas))
-    console.log('[PDF] IntersectionObserver setup for', canvases.length, 'pages')
   }
 
   // Render a page and its buffer pages
@@ -180,9 +171,7 @@ export function usePdfReader(paneIndex) {
 
   // Render initial visible pages (first page + buffer)
   async function renderInitialPages() {
-    console.log('[PDF] Rendering initial pages...')
     await renderPageWithBuffer(1)
-    console.log('[PDF] Initial pages rendered')
   }
 
   // Generate TOC from PDF outline
@@ -240,9 +229,6 @@ export function usePdfReader(paneIndex) {
 
   // Open PDF file
   async function openFile(file) {
-    console.log('[PDF] openFile called, file:', file.name)
-    console.log('[PDF] containerRef:', containerRef.value)
-
     if (!containerRef.value) {
       throw new Error('Container not ready')
     }
@@ -255,16 +241,11 @@ export function usePdfReader(paneIndex) {
       cleanup()
 
       // Read file as ArrayBuffer
-      console.log('[PDF] Reading file as ArrayBuffer...')
       const arrayBuffer = await file.arrayBuffer()
-      console.log('[PDF] ArrayBuffer size:', arrayBuffer.byteLength)
 
       // Load PDF
-      console.log('[PDF] Loading PDF document...')
-      console.log('[PDF] Worker source:', pdfjsLib.GlobalWorkerOptions.workerSrc)
       const loadingTask = pdfjsLib.getDocument({ data: arrayBuffer })
       pdf.value = await loadingTask.promise
-      console.log('[PDF] PDF loaded, pages:', pdf.value.numPages)
 
       totalPages.value = pdf.value.numPages
       currentPage.value = 1
