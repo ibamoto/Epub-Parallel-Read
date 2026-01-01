@@ -197,16 +197,36 @@ export function usePdfReader(paneIndex) {
   }
 
   // Go to specific page (clamps to valid range)
+  // Returns true if page actually changed, false if at boundary
   async function goToPage(pageNum) {
-    if (!pdf.value || !totalPages.value) return
+    if (!pdf.value || !totalPages.value) return false
 
     // Clamp page number to valid range
     const clampedPage = Math.max(1, Math.min(totalPages.value, pageNum))
-    if (clampedPage === currentPage.value) return
+    if (clampedPage === currentPage.value) {
+      // Already at this page (boundary reached)
+      showBoundaryFeedback()
+      return false
+    }
 
     currentPage.value = clampedPage
     readerStore.setCurrentPage(paneIndex, clampedPage)
     await renderCurrentPage()
+    return true
+  }
+
+  // Show visual feedback when boundary is reached
+  function showBoundaryFeedback() {
+    if (!containerRef.value) return
+    const container = containerRef.value
+    container.style.transition = 'background-color 0.15s ease-out'
+    container.style.backgroundColor = 'rgba(128, 128, 128, 0.3)'
+    setTimeout(() => {
+      container.style.backgroundColor = ''
+      setTimeout(() => {
+        container.style.transition = ''
+      }, 150)
+    }, 150)
   }
 
   // Navigate to TOC item
@@ -219,16 +239,12 @@ export function usePdfReader(paneIndex) {
 
   // Next page
   function next() {
-    if (currentPage.value < totalPages.value) {
-      goToPage(currentPage.value + 1)
-    }
+    goToPage(currentPage.value + 1)
   }
 
   // Previous page
   function prev() {
-    if (currentPage.value > 1) {
-      goToPage(currentPage.value - 1)
-    }
+    goToPage(currentPage.value - 1)
   }
 
   // Set scale and re-render

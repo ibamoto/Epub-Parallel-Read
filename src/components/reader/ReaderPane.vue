@@ -227,8 +227,16 @@ defineExpose({
   getScrollInfo: () => activeReader.value?.getScrollInfo(),
   setScrollByRatio: (ratio) => activeReader.value?.setScrollByRatio(ratio),
   resize: () => activeReader.value?.resize?.(),
-  next: () => activeReader.value?.next?.(),
-  prev: () => activeReader.value?.prev?.(),
+  next: () => {
+    const type = readerStore.fileTypes[props.paneIndex];
+    if (type === 'epub') epubReader.next?.();
+    else if (type === 'pdf') pdfReader.next?.();
+  },
+  prev: () => {
+    const type = readerStore.fileTypes[props.paneIndex];
+    if (type === 'epub') epubReader.prev?.();
+    else if (type === 'pdf') pdfReader.prev?.();
+  },
   scrollBy: (distance) => epubReader.scrollBy?.(distance),
   pageBy: (pages) => pdfReader.goToPage?.(pdfReader.currentPage.value + pages),
   applySettings: () => {
