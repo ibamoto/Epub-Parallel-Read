@@ -41,6 +41,14 @@
           class="reader-view"
         ></div>
 
+        <!-- Progress Bar -->
+        <div v-if="showProgress" class="progress-bar-container">
+          <div class="progress-bar">
+            <div class="progress-fill" :style="{ width: progressPercent + '%' }"></div>
+          </div>
+          <span class="progress-text">{{ Math.round(progressPercent) }}%</span>
+        </div>
+
         <!-- Error Message -->
         <div v-if="readerStore.errors[paneIndex]" class="error-message">
           {{ readerStore.errors[paneIndex] }}
@@ -61,6 +69,7 @@
 <script setup>
 import { ref, computed, watch, onMounted, onUnmounted } from "vue";
 import { useReaderStore } from "../../stores/reader";
+import { useSettingsStore } from "../../stores/settings";
 import { useEpubReader } from "../../composables/useEpubReader";
 import { usePdfReader } from "../../composables/usePdfReader";
 import TableOfContents from "../navigation/TableOfContents.vue";
@@ -79,13 +88,24 @@ const props = defineProps({
 const emit = defineEmits(["scroll", "navigate"]);
 
 const readerStore = useReaderStore();
+const settingsStore = useSettingsStore();
 
 const readerView = ref(null);
 const isDragging = ref(false);
+const scrollProgress = ref(0);
 
-// Handle scroll - emit to parent for sync
+// Handle scroll - emit to parent for sync and update progress
 function handleScroll() {
   emit("scroll", props.paneIndex);
+  updateScrollProgress();
+}
+
+// Update scroll progress for EPUB
+function updateScrollProgress() {
+  const scrollInfo = epubReader.getScrollInfo?.();
+  if (scrollInfo && typeof scrollInfo.scrollRatio === 'number') {
+    scrollProgress.value = scrollInfo.scrollRatio;
+  }
 }
 
 // Initialize readers with scroll callback
@@ -116,6 +136,24 @@ const fileInfo = computed(() => {
   }
 
   return name;
+});
+
+// Progress bar percentage
+const progressPercent = computed(() => {
+  const type = readerStore.fileTypes[props.paneIndex];
+  if (type === "pdf") {
+    const current = readerStore.currentPages[props.paneIndex];
+    const total = readerStore.totalPages[props.paneIndex];
+    if (total <= 1) return 100;
+    return ((current - 1) / (total - 1)) * 100;
+  }
+  // For EPUB, use scroll progress
+  return scrollProgress.value * 100;
+});
+
+// Whether to show progress bar
+const showProgress = computed(() => {
+  return settingsStore.showProgressBar[props.paneIndex] && hasContent.value;
 });
 
 // Set container ref after mount
@@ -315,6 +353,39 @@ onUnmounted(() => {
   color: #dc2626;
   text-align: center;
   font-size: 0.9rem;
+}
+
+/* Progress Bar */
+.progress-bar-container {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem 1rem;
+  background: var(--bg-secondary);
+  border-top: 1px solid var(--border-color);
+  flex-shrink: 0;
+}
+
+.progress-bar {
+  flex: 1;
+  height: 6px;
+  background: var(--border-color);
+  border-radius: 3px;
+  overflow: hidden;
+}
+
+.progress-fill {
+  height: 100%;
+  background: var(--accent-color);
+  border-radius: 3px;
+  transition: width 0.15s ease-out;
+}
+
+.progress-text {
+  font-size: 0.75rem;
+  color: var(--text-tertiary);
+  min-width: 3em;
+  text-align: right;
 }
 
 .navigation-group {
