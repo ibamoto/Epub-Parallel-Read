@@ -256,6 +256,11 @@ function handleSettingsChanged() {
     reader2.value.applySettings?.()
   }
 }
+
+// Watch theme changes to apply to EPUB content automatically
+watch(() => settingsStore.theme, () => {
+  handleSettingsChanged()
+})
 </script>
 
 <style>
