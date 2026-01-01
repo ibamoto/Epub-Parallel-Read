@@ -63,33 +63,20 @@
 
     <!-- Navigation Buttons -->
     <div class="navigation-group" :class="position">
-      <button class="settings-btn" @click="showSettings = true">
-        <span>Aa</span>
-      </button>
       <button @click="handlePrev">← 前へ</button>
       <button @click="handleNext">次へ →</button>
 
       <span v-if="fileInfo" class="file-info">{{ fileInfo }}</span>
     </div>
-
-    <!-- Settings Panel (uses Teleport, so placement here doesn't affect layout) -->
-    <SettingsPanel
-      :visible="showSettings"
-      :paneIndex="paneIndex"
-      @close="showSettings = false"
-      @settings-changed="handleSettingsChanged"
-    />
   </div>
 </template>
 
 <script setup>
 import { ref, computed, watch, onMounted, onUnmounted } from "vue";
 import { useReaderStore } from "../../stores/reader";
-import { useSettingsStore } from "../../stores/settings";
 import { useEpubReader } from "../../composables/useEpubReader";
 import { usePdfReader } from "../../composables/usePdfReader";
 import TableOfContents from "../navigation/TableOfContents.vue";
-import SettingsPanel from "../settings/SettingsPanel.vue";
 
 const props = defineProps({
   paneIndex: {
@@ -105,11 +92,9 @@ const props = defineProps({
 const emit = defineEmits(["scroll", "navigate"]);
 
 const readerStore = useReaderStore();
-const settingsStore = useSettingsStore();
 
 const readerView = ref(null);
 const isDragging = ref(false);
-const showSettings = ref(false);
 
 // Initialize readers
 const epubReader = useEpubReader(props.paneIndex);
@@ -204,14 +189,6 @@ function handleScroll() {
   emit("scroll", props.paneIndex);
 }
 
-// Handle settings changed
-function handleSettingsChanged() {
-  if (readerStore.fileTypes[props.paneIndex] === "epub") {
-    epubReader.applyTheme();
-    epubReader.applySettings();
-  }
-}
-
 // Expose methods for parent
 defineExpose({
   openFile,
@@ -221,6 +198,12 @@ defineExpose({
   next: () => activeReader.value?.next?.(),
   prev: () => activeReader.value?.prev?.(),
   scrollBy: (distance) => epubReader.scrollBy?.(distance),
+  applySettings: () => {
+    if (readerStore.fileTypes[props.paneIndex] === 'epub') {
+      epubReader.applyTheme()
+      epubReader.applySettings()
+    }
+  },
 });
 
 // Cleanup
@@ -373,10 +356,6 @@ onUnmounted(() => {
 .navigation-group button:hover {
   background: var(--bg-hover);
   border-color: var(--accent-color);
-}
-
-.settings-btn {
-  font-weight: 600;
 }
 
 .file-info {
