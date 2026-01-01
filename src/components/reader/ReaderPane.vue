@@ -147,6 +147,11 @@ onMounted(() => {
     epubReader.containerRef.value = readerView.value;
     pdfReader.containerRef.value = readerView.value;
   }
+
+  // Set up scroll callback for EPUB sync
+  epubReader.setOnScroll(() => {
+    emit("scroll", props.paneIndex);
+  });
 });
 
 // Watch for container changes
