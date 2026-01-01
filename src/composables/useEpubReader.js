@@ -211,6 +211,30 @@ export function useEpubReader(paneIndex) {
       // Enable scrolled mode for continuous scrolling with mouse wheel and arrow keys
       foliateView.setAttribute('flow', 'scrolled')
 
+      // Handle wheel events for scrolling in scrolled mode
+      // Use next(distance)/prev(distance) to scroll by pixel amount
+      const wheelHandler = (e) => {
+        e.preventDefault()
+        e.stopPropagation()
+
+        const distance = Math.abs(e.deltaY)
+        if (e.deltaY > 0) {
+          foliateView.next(distance)
+        } else if (e.deltaY < 0) {
+          foliateView.prev(distance)
+        }
+
+        // Dispatch a custom event for scroll sync
+        containerRef.value?.dispatchEvent(new CustomEvent('epub-wheel', {
+          bubbles: true,
+          detail: { deltaY: e.deltaY, deltaX: e.deltaX }
+        }))
+      }
+
+      // Add wheel listener with capture phase to intercept before iframe
+      wrapper.addEventListener('wheel', wheelHandler, { passive: false, capture: true })
+      foliateView.addEventListener('wheel', wheelHandler, { passive: false, capture: true })
+
       // Initialize view
       await foliateView.init({ showTextStart: true })
 
@@ -257,6 +281,21 @@ export function useEpubReader(paneIndex) {
       await view.value.prev()
     } catch (error) {
       console.error('Error navigating prev:', error)
+    }
+  }
+
+  // Scroll by distance (positive = down, negative = up)
+  // Used for arrow key scrolling
+  async function scrollBy(distance) {
+    if (!view.value) return
+    try {
+      if (distance > 0) {
+        await view.value.next(Math.abs(distance))
+      } else if (distance < 0) {
+        await view.value.prev(Math.abs(distance))
+      }
+    } catch (error) {
+      console.error('Error scrolling:', error)
     }
   }
 
@@ -327,6 +366,7 @@ export function useEpubReader(paneIndex) {
     goTo,
     next,
     prev,
+    scrollBy,
     resize,
     applyTheme,
     applySettings,
