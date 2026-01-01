@@ -40,6 +40,9 @@ export const useSettingsStore = defineStore('settings', () => {
   // Use scroll/page amount for wheel navigation
   const useWheelAmount = ref(false)
 
+  // Show progress bar for each pane
+  const showProgressBar = ref([true, true])
+
   // Theme settings
   const theme = ref('light') // 'light' | 'dark' | 'sepia' | 'custom'
   const customColors = ref({
@@ -77,6 +80,7 @@ export const useSettingsStore = defineStore('settings', () => {
         scrollAmounts.value = parsed.scrollAmounts ?? [100, 100]
         pdfPageAmounts.value = parsed.pdfPageAmounts ?? [1, 1]
         useWheelAmount.value = parsed.useWheelAmount ?? false
+        showProgressBar.value = parsed.showProgressBar ?? [true, true]
 
         if (parsed.customColors) {
           customColors.value = { ...customColors.value, ...parsed.customColors }
@@ -108,6 +112,7 @@ export const useSettingsStore = defineStore('settings', () => {
         scrollAmounts: scrollAmounts.value,
         pdfPageAmounts: pdfPageAmounts.value,
         useWheelAmount: useWheelAmount.value,
+        showProgressBar: showProgressBar.value,
       }
       localStorage.setItem(STORAGE_KEY, JSON.stringify(data))
     } catch (error) {
@@ -181,7 +186,7 @@ export const useSettingsStore = defineStore('settings', () => {
   }
 
   // Auto-save on changes
-  watch([isDarkMode, syncMode, showControls, syncSensitivity, theme, customColors, paneSettings, scrollAmounts, pdfPageAmounts, useWheelAmount], () => {
+  watch([isDarkMode, syncMode, showControls, syncSensitivity, theme, customColors, paneSettings, scrollAmounts, pdfPageAmounts, useWheelAmount, showProgressBar], () => {
     saveSettings()
   }, { deep: true })
 
@@ -198,6 +203,7 @@ export const useSettingsStore = defineStore('settings', () => {
     scrollAmounts,
     pdfPageAmounts,
     useWheelAmount,
+    showProgressBar,
 
     // Actions
     loadSettings,

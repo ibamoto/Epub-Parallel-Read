@@ -54,6 +54,14 @@
 
       <!-- Left Pane Settings -->
       <div class="pane-settings" v-if="readerStore.fileTypes[0]">
+        <button
+          class="progress-toggle"
+          :class="{ active: settingsStore.showProgressBar[0] }"
+          @click="toggleProgressBar(0)"
+          title="左ペインのプログレスバー"
+        >
+          <span>━</span>
+        </button>
         <div class="scroll-amount-control" v-if="readerStore.fileTypes[0] === 'epub'" title="左ペインのスクロール量 (px)">
           <label>⇅</label>
           <input
@@ -113,6 +121,14 @@
           />
           <label>⇅</label>
         </div>
+        <button
+          class="progress-toggle"
+          :class="{ active: settingsStore.showProgressBar[1] }"
+          @click="toggleProgressBar(1)"
+          title="右ペインのプログレスバー"
+        >
+          <span>━</span>
+        </button>
       </div>
 
       <!-- Right Pane Button with History -->
@@ -261,6 +277,11 @@ function updatePdfPageAmount(paneIndex, event) {
     settingsStore.pdfPageAmounts[paneIndex] = value
   }
 }
+
+// Toggle progress bar
+function toggleProgressBar(paneIndex) {
+  settingsStore.showProgressBar[paneIndex] = !settingsStore.showProgressBar[paneIndex]
+}
 </script>
 
 <style scoped>
@@ -401,6 +422,29 @@ function updatePdfPageAmount(paneIndex, event) {
 .wheel-toggle.active {
   background: var(--accent-color);
   border-color: var(--accent-color);
+}
+
+.progress-toggle {
+  padding: 0.3rem 0.5rem;
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  background: var(--bg-tertiary);
+  color: var(--text-tertiary);
+  cursor: pointer;
+  transition: all 0.2s;
+  font-size: 0.9rem;
+  line-height: 1;
+}
+
+.progress-toggle:hover {
+  background: var(--bg-hover);
+  border-color: var(--accent-color);
+}
+
+.progress-toggle.active {
+  background: var(--accent-color);
+  border-color: var(--accent-color);
+  color: white;
 }
 
 .scroll-amount-control label {
