@@ -53,8 +53,8 @@
       </div>
 
       <!-- Left Pane Settings -->
-      <div class="pane-settings">
-        <div class="scroll-amount-control" title="左ペインのEPUBスクロール量 (px)">
+      <div class="pane-settings" v-if="readerStore.fileTypes[0]">
+        <div class="scroll-amount-control" v-if="readerStore.fileTypes[0] === 'epub'" title="左ペインのスクロール量 (px)">
           <label>⇅</label>
           <input
             type="number"
@@ -65,7 +65,7 @@
             step="10"
           />
         </div>
-        <div class="scroll-amount-control" title="左ペインのPDFページ数">
+        <div class="scroll-amount-control" v-if="readerStore.fileTypes[0] === 'pdf'" title="左ペインのページ数">
           <label>📄</label>
           <input
             type="number"
@@ -78,8 +78,9 @@
         </div>
       </div>
 
-      <!-- Wheel Amount Toggle -->
+      <!-- Wheel Amount Toggle (only show if any PDF is open) -->
       <button
+        v-if="readerStore.fileTypes[0] === 'pdf' || readerStore.fileTypes[1] === 'pdf'"
         class="wheel-toggle"
         :class="{ active: settingsStore.useWheelAmount }"
         @click="settingsStore.useWheelAmount = !settingsStore.useWheelAmount"
@@ -89,8 +90,8 @@
       </button>
 
       <!-- Right Pane Settings -->
-      <div class="pane-settings right">
-        <div class="scroll-amount-control" title="右ペインのPDFページ数">
+      <div class="pane-settings right" v-if="readerStore.fileTypes[1]">
+        <div class="scroll-amount-control" v-if="readerStore.fileTypes[1] === 'pdf'" title="右ペインのページ数">
           <input
             type="number"
             :value="settingsStore.pdfPageAmounts[1]"
@@ -101,7 +102,7 @@
           />
           <label>📄</label>
         </div>
-        <div class="scroll-amount-control" title="右ペインのEPUBスクロール量 (px)">
+        <div class="scroll-amount-control" v-if="readerStore.fileTypes[1] === 'epub'" title="右ペインのスクロール量 (px)">
           <input
             type="number"
             :value="settingsStore.scrollAmounts[1]"
@@ -160,9 +161,11 @@
 <script setup>
 import { ref, nextTick, onMounted, onUnmounted } from 'vue'
 import { useSettingsStore } from '../../stores/settings'
+import { useReaderStore } from '../../stores/reader'
 import { useFileHistory } from '../../composables/useFileHistory'
 
 const settingsStore = useSettingsStore()
+const readerStore = useReaderStore()
 const { leftHistory, rightHistory, init, getFileById, deleteFromHistory, formatFileSize, formatDate } = useFileHistory()
 
 const appVersion = window.appVersion || '2.0.0'
