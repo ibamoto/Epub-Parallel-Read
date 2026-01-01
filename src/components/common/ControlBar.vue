@@ -266,7 +266,7 @@ async function deleteHistoryItem(id) {
 function updateScrollAmount(paneIndex, event) {
   const value = parseInt(event.target.value, 10)
   if (!isNaN(value) && value >= 10 && value <= 1000) {
-    settingsStore.scrollAmounts[paneIndex] = value
+    settingsStore.setScrollAmount(paneIndex, value)
   }
 }
 
@@ -274,13 +274,13 @@ function updateScrollAmount(paneIndex, event) {
 function updatePdfPageAmount(paneIndex, event) {
   const value = parseInt(event.target.value, 10)
   if (!isNaN(value) && value >= 1 && value <= 100) {
-    settingsStore.pdfPageAmounts[paneIndex] = value
+    settingsStore.setPdfPageAmount(paneIndex, value)
   }
 }
 
 // Toggle progress bar
 function toggleProgressBar(paneIndex) {
-  settingsStore.showProgressBar[paneIndex] = !settingsStore.showProgressBar[paneIndex]
+  settingsStore.setShowProgressBar(paneIndex, !settingsStore.showProgressBar[paneIndex])
 }
 </script>
 
