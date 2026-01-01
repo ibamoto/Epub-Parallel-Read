@@ -1,39 +1,41 @@
 <template>
-  <div class="toc-sidebar" :class="{ 'toc-hidden': !visible, 'toc-left': position === 'left', 'toc-right': position === 'right' }">
-    <div class="toc-header">
-      <button v-if="position === 'left'" class="toc-toggle" @click="$emit('toggle')">
-        <span class="toggle-icon">{{ visible ? '◀' : '▶' }}</span>
-      </button>
-      <div class="toc-title">目次</div>
-      <button v-if="position === 'right'" class="toc-toggle" @click="$emit('toggle')">
-        <span class="toggle-icon">{{ visible ? '▶' : '◀' }}</span>
-      </button>
-    </div>
-    <div class="toc-content" v-if="items.length > 0">
-      <div
-        v-for="(item, index) in items"
-        :key="index"
-        class="toc-item"
-        :class="{ active: isActive(item) }"
-        :style="{ paddingLeft: `${12 + item.level * 12}px` }"
-        @click="$emit('navigate', item.href)"
-      >
-        {{ item.label }}
+  <div class="toc-container" :class="position">
+    <div class="toc-sidebar" :class="{ 'toc-hidden': !visible, 'toc-left': position === 'left', 'toc-right': position === 'right' }">
+      <div class="toc-header">
+        <button v-if="position === 'left'" class="toc-toggle" @click="$emit('toggle')">
+          <span class="toggle-icon">{{ visible ? '◀' : '▶' }}</span>
+        </button>
+        <div class="toc-title">目次</div>
+        <button v-if="position === 'right'" class="toc-toggle" @click="$emit('toggle')">
+          <span class="toggle-icon">{{ visible ? '▶' : '◀' }}</span>
+        </button>
+      </div>
+      <div class="toc-content" v-if="items.length > 0">
+        <div
+          v-for="(item, index) in items"
+          :key="index"
+          class="toc-item"
+          :class="{ active: isActive(item) }"
+          :style="{ paddingLeft: `${12 + item.level * 12}px` }"
+          @click="$emit('navigate', item.href)"
+        >
+          {{ item.label }}
+        </div>
+      </div>
+      <div class="toc-empty" v-else>
+        <span>目次がありません</span>
       </div>
     </div>
-    <div class="toc-empty" v-else>
-      <span>目次がありません</span>
-    </div>
-  </div>
 
-  <button
-    v-if="!visible"
-    class="toc-show-button"
-    :class="position"
-    @click="$emit('toggle')"
-  >
-    <span class="toggle-icon">{{ position === 'left' ? '▶' : '◀' }}</span>
-  </button>
+    <button
+      v-if="!visible"
+      class="toc-show-button"
+      :class="position"
+      @click="$emit('toggle')"
+    >
+      <span class="toggle-icon">{{ position === 'left' ? '▶' : '◀' }}</span>
+    </button>
+  </div>
 </template>
 
 <script setup>
@@ -67,6 +69,20 @@ function isActive(item) {
 </script>
 
 <style scoped>
+.toc-container {
+  position: relative;
+  display: flex;
+  flex-shrink: 0;
+}
+
+.toc-container.left {
+  order: -1;
+}
+
+.toc-container.right {
+  order: 1;
+}
+
 .toc-sidebar {
   width: 200px;
   min-width: 200px;
@@ -207,9 +223,14 @@ function isActive(item) {
   opacity: 1 !important;
 }
 
-/* Show button on wrapper hover */
-:global(.reader-wrapper:hover) .toc-show-button {
+/* Show button on container hover */
+.toc-container:hover .toc-show-button {
   opacity: 0.7;
+}
+
+/* Always show button when TOC is hidden */
+.toc-container .toc-show-button {
+  opacity: 0.5;
 }
 
 /* Responsive */

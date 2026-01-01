@@ -52,36 +52,66 @@
         </div>
       </div>
 
-      <!-- Left Pane Scroll Amount -->
-      <div class="scroll-amount-control">
-        <label title="左ペインのスクロール量 (px)">⇅</label>
-        <button class="scroll-btn" @click="adjustScrollAmount(0, -10)" title="スクロール量を減らす">−</button>
-        <input
-          type="number"
-          :value="settingsStore.scrollAmounts[0]"
-          @input="updateScrollAmount(0, $event)"
-          min="10"
-          max="1000"
-          step="10"
-          title="左ペインのスクロール量 (px)"
-        />
-        <button class="scroll-btn" @click="adjustScrollAmount(0, 10)" title="スクロール量を増やす">+</button>
+      <!-- Left Pane Settings -->
+      <div class="pane-settings">
+        <div class="scroll-amount-control" title="左ペインのEPUBスクロール量 (px)">
+          <label>⇅</label>
+          <input
+            type="number"
+            :value="settingsStore.scrollAmounts[0]"
+            @input="updateScrollAmount(0, $event)"
+            min="10"
+            max="1000"
+            step="10"
+          />
+        </div>
+        <div class="scroll-amount-control" title="左ペインのPDFページ数">
+          <label>📄</label>
+          <input
+            type="number"
+            :value="settingsStore.pdfPageAmounts[0]"
+            @input="updatePdfPageAmount(0, $event)"
+            min="1"
+            max="100"
+            step="1"
+          />
+        </div>
       </div>
 
-      <!-- Right Pane Scroll Amount -->
-      <div class="scroll-amount-control right">
-        <button class="scroll-btn" @click="adjustScrollAmount(1, -10)" title="スクロール量を減らす">−</button>
-        <input
-          type="number"
-          :value="settingsStore.scrollAmounts[1]"
-          @input="updateScrollAmount(1, $event)"
-          min="10"
-          max="1000"
-          step="10"
-          title="右ペインのスクロール量 (px)"
-        />
-        <button class="scroll-btn" @click="adjustScrollAmount(1, 10)" title="スクロール量を増やす">+</button>
-        <label title="右ペインのスクロール量 (px)">⇅</label>
+      <!-- Wheel Amount Toggle -->
+      <button
+        class="wheel-toggle"
+        :class="{ active: settingsStore.useWheelAmount }"
+        @click="settingsStore.useWheelAmount = !settingsStore.useWheelAmount"
+        title="ホイール操作で設定したページ数を使用"
+      >
+        <span>🖱️</span>
+      </button>
+
+      <!-- Right Pane Settings -->
+      <div class="pane-settings right">
+        <div class="scroll-amount-control" title="右ペインのPDFページ数">
+          <input
+            type="number"
+            :value="settingsStore.pdfPageAmounts[1]"
+            @input="updatePdfPageAmount(1, $event)"
+            min="1"
+            max="100"
+            step="1"
+          />
+          <label>📄</label>
+        </div>
+        <div class="scroll-amount-control" title="右ペインのEPUBスクロール量 (px)">
+          <input
+            type="number"
+            :value="settingsStore.scrollAmounts[1]"
+            @input="updateScrollAmount(1, $event)"
+            min="10"
+            max="1000"
+            step="10"
+          />
+          <label>⇅</label>
+        </div>
       </div>
 
       <!-- Right Pane Button with History -->
@@ -221,11 +251,12 @@ function updateScrollAmount(paneIndex, event) {
   }
 }
 
-// Adjust scroll amount by delta
-function adjustScrollAmount(paneIndex, delta) {
-  const currentValue = settingsStore.scrollAmounts[paneIndex]
-  const newValue = Math.max(10, Math.min(1000, currentValue + delta))
-  settingsStore.scrollAmounts[paneIndex] = newValue
+// Update PDF page amount
+function updatePdfPageAmount(paneIndex, event) {
+  const value = parseInt(event.target.value, 10)
+  if (!isNaN(value) && value >= 1 && value <= 100) {
+    settingsStore.pdfPageAmounts[paneIndex] = value
+  }
 }
 </script>
 
@@ -333,14 +364,40 @@ function adjustScrollAmount(paneIndex, delta) {
   margin-left: 0;
 }
 
+.pane-settings {
+  display: flex;
+  gap: 0.25rem;
+}
+
+.pane-settings.right {
+  margin-left: auto;
+}
+
 .scroll-amount-control {
   display: flex;
   align-items: center;
   gap: 0.25rem;
 }
 
-.scroll-amount-control.right {
-  margin-left: auto;
+.wheel-toggle {
+  padding: 0.3rem 0.5rem;
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  background: var(--bg-tertiary);
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: all 0.2s;
+  font-size: 0.9rem;
+}
+
+.wheel-toggle:hover {
+  background: var(--bg-hover);
+  border-color: var(--accent-color);
+}
+
+.wheel-toggle.active {
+  background: var(--accent-color);
+  border-color: var(--accent-color);
 }
 
 .scroll-amount-control label {

@@ -3,7 +3,6 @@
     <div class="reader-wrapper" :class="position">
       <!-- TOC Sidebar -->
       <TableOfContents
-        v-if="position === 'left'"
         :items="readerStore.tocs[paneIndex]"
         :visible="readerStore.showToc[paneIndex]"
         :position="position"
@@ -47,17 +46,6 @@
           {{ readerStore.errors[paneIndex] }}
         </div>
       </div>
-
-      <!-- TOC Sidebar (Right) -->
-      <TableOfContents
-        v-if="position === 'right'"
-        :items="readerStore.tocs[paneIndex]"
-        :visible="readerStore.showToc[paneIndex]"
-        :position="position"
-        :currentLocation="readerStore.currentLocations[paneIndex]"
-        @toggle="readerStore.toggleToc(paneIndex)"
-        @navigate="handleNavigate"
-      />
     </div>
 
     <!-- Navigation Buttons -->
@@ -202,6 +190,7 @@ defineExpose({
   next: () => activeReader.value?.next?.(),
   prev: () => activeReader.value?.prev?.(),
   scrollBy: (distance) => epubReader.scrollBy?.(distance),
+  pageBy: (pages) => pdfReader.goToPage?.(pdfReader.currentPage.value + pages),
   applySettings: () => {
     if (readerStore.fileTypes[props.paneIndex] === 'epub') {
       epubReader.applyTheme()
