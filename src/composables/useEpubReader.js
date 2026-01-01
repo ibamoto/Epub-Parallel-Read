@@ -25,6 +25,7 @@ export function useEpubReader(paneIndex) {
   const currentSectionIndex = ref(0)
   const blobUrls = ref([]) // Track blob URLs for cleanup
   let onScrollCallback = null // Callback for scroll events
+  let scrollThrottleTimer = null // Throttle scroll events
 
   // Process TOC to flat structure
   function processToc(toc) {
@@ -358,11 +359,16 @@ export function useEpubReader(paneIndex) {
     // Native scrolling handles resize automatically
   }
 
-  // Handle scroll event and call callback
+  // Handle scroll event and call callback (throttled)
   function handleScrollEvent() {
-    if (onScrollCallback) {
+    if (!onScrollCallback) return
+
+    // Throttle to 60fps (16ms)
+    if (scrollThrottleTimer) return
+    scrollThrottleTimer = setTimeout(() => {
+      scrollThrottleTimer = null
       onScrollCallback()
-    }
+    }, 16)
   }
 
   // Set scroll callback for sync
@@ -392,6 +398,12 @@ export function useEpubReader(paneIndex) {
 
   // Cleanup
   function cleanup() {
+    // Clear throttle timer
+    if (scrollThrottleTimer) {
+      clearTimeout(scrollThrottleTimer)
+      scrollThrottleTimer = null
+    }
+
     // Revoke blob URLs
     blobUrls.value.forEach(url => URL.revokeObjectURL(url))
     blobUrls.value = []
