@@ -12,7 +12,7 @@ const getEpubModule = async () => {
   return epubModule
 }
 
-export function useEpubReader(paneIndex) {
+export function useEpubReader(paneIndex, onScroll = null) {
   const readerStore = useReaderStore()
   const settingsStore = useSettingsStore()
 
@@ -24,6 +24,7 @@ export function useEpubReader(paneIndex) {
   const sections = ref([])
   const currentSectionIndex = ref(0)
   const blobUrls = ref([]) // Track blob URLs for cleanup
+  const scrollHandler = ref(null) // Store scroll handler for cleanup
 
   // Process TOC to flat structure
   function processToc(toc) {
@@ -212,6 +213,12 @@ export function useEpubReader(paneIndex) {
       contentWrapper.value.className = `epub-content-${paneIndex}`
       containerRef.value.appendChild(contentWrapper.value)
 
+      // Add scroll listener for sync
+      if (onScroll) {
+        scrollHandler.value = () => onScroll()
+        contentWrapper.value.addEventListener('scroll', scrollHandler.value)
+      }
+
       // Load all sections and render them
       console.log(`Loading ${sections.value.length} sections...`)
       for (let i = 0; i < sections.value.length; i++) {
@@ -379,6 +386,12 @@ export function useEpubReader(paneIndex) {
     // Revoke blob URLs
     blobUrls.value.forEach(url => URL.revokeObjectURL(url))
     blobUrls.value = []
+
+    // Remove scroll listener
+    if (contentWrapper.value && scrollHandler.value) {
+      contentWrapper.value.removeEventListener('scroll', scrollHandler.value)
+      scrollHandler.value = null
+    }
 
     // Remove style element
     if (styleElement.value && styleElement.value.parentNode) {

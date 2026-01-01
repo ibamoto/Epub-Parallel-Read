@@ -40,7 +40,6 @@
           v-show="hasContent && !readerStore.isLoading[paneIndex]"
           ref="readerView"
           class="reader-view"
-          @scroll="handleScroll"
         ></div>
 
         <!-- Error Message -->
@@ -96,8 +95,13 @@ const readerStore = useReaderStore();
 const readerView = ref(null);
 const isDragging = ref(false);
 
-// Initialize readers
-const epubReader = useEpubReader(props.paneIndex);
+// Handle scroll - emit to parent for sync
+function handleScroll() {
+  emit("scroll", props.paneIndex);
+}
+
+// Initialize readers with scroll callback
+const epubReader = useEpubReader(props.paneIndex, handleScroll);
 const pdfReader = usePdfReader(props.paneIndex);
 
 // Current active reader
@@ -182,11 +186,6 @@ function handleNext() {
 function handlePrev() {
   activeReader.value?.prev();
   emit("navigate", props.paneIndex, "prev");
-}
-
-// Handle scroll
-function handleScroll() {
-  emit("scroll", props.paneIndex);
 }
 
 // Expose methods for parent
