@@ -412,24 +412,27 @@ export function usePdfReader(paneIndex) {
     containerRef.value.addEventListener('wheel', wheelHandler, { passive: false })
   }
 
-  // Get scroll info for sync
+  // Get scroll info for sync - for PDF, calculate ratio from page number
   function getScrollInfo() {
-    if (!containerRef.value) return null
-    const el = containerRef.value
+    if (!totalPages.value) return null
+    // Convert current page to scroll ratio
+    const scrollRatio = (currentPage.value - 1) / Math.max(1, totalPages.value - 1)
     return {
-      scrollTop: el.scrollTop,
-      scrollHeight: el.scrollHeight,
-      clientHeight: el.clientHeight,
-      scrollRatio: el.scrollTop / Math.max(1, el.scrollHeight - el.clientHeight),
+      scrollTop: 0,
+      scrollHeight: totalPages.value,
+      clientHeight: 1,
+      scrollRatio: scrollRatio,
     }
   }
 
-  // Set scroll position by ratio
+  // Set scroll position by ratio - for PDF, convert to page number
   function setScrollByRatio(ratio) {
-    if (!containerRef.value) return
-    const el = containerRef.value
-    const maxScroll = el.scrollHeight - el.clientHeight
-    el.scrollTop = ratio * maxScroll
+    if (!totalPages.value) return
+    // Convert scroll ratio to page number
+    const targetPage = Math.max(1, Math.min(totalPages.value, Math.round(ratio * (totalPages.value - 1)) + 1))
+    if (targetPage !== currentPage.value) {
+      goToPage(targetPage)
+    }
   }
 
   // Cleanup
