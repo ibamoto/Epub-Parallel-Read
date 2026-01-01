@@ -9,6 +9,10 @@
       スクロール同期
     </button>
 
+    <button class="settings-btn" @click="emit('open-settings')" title="表示設定">
+      <span>Aa</span>
+    </button>
+
     <div class="file-inputs">
       <!-- Hidden file inputs -->
       <input type="file" ref="leftFileInput" @change="handleFileChange(0, $event)" :accept="acceptTypes" class="hidden-input" />
@@ -102,7 +106,7 @@ const { leftHistory, rightHistory, init, getFileById, deleteFromHistory, formatF
 const appVersion = window.appVersion || '2.0.0'
 const acceptTypes = '.epub,.pdf'
 
-const emit = defineEmits(['file-select', 'history-select'])
+const emit = defineEmits(['file-select', 'history-select', 'open-settings'])
 
 const showDropdown = ref([false, false])
 const leftFileInput = ref(null)
@@ -249,6 +253,23 @@ async function deleteHistoryItem(id) {
 
 .sync-icon {
   font-size: 1rem;
+}
+
+.settings-btn {
+  padding: 0.4rem 0.75rem;
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  background: var(--bg-tertiary);
+  color: var(--text-primary);
+  cursor: pointer;
+  transition: all 0.2s;
+  font-size: 0.9rem;
+  font-weight: 600;
+}
+
+.settings-btn:hover {
+  background: var(--bg-hover);
+  border-color: var(--accent-color);
 }
 
 .file-inputs {

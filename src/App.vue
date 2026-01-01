@@ -7,7 +7,7 @@
     />
 
     <!-- Control Bar -->
-    <ControlBar @file-select="handleFileSelect" @history-select="handleHistorySelect" />
+    <ControlBar @file-select="handleFileSelect" @history-select="handleHistorySelect" @open-settings="showSettings = true" />
 
     <!-- Reader Container -->
     <div class="reader-container">
@@ -40,6 +40,14 @@
       {{ globalError }}
       <button @click="globalError = ''">×</button>
     </div>
+
+    <!-- Unified Settings Panel -->
+    <SettingsPanel
+      :visible="showSettings"
+      :paneIndex="-1"
+      @close="showSettings = false"
+      @settings-changed="handleSettingsChanged"
+    />
   </div>
 </template>
 
@@ -50,6 +58,7 @@ import { useReaderStore } from './stores/reader'
 import { useFileHistory } from './composables/useFileHistory'
 import ControlBar from './components/common/ControlBar.vue'
 import ReaderPane from './components/reader/ReaderPane.vue'
+import SettingsPanel from './components/settings/SettingsPanel.vue'
 
 const settingsStore = useSettingsStore()
 const readerStore = useReaderStore()
@@ -59,6 +68,7 @@ const reader1 = ref(null)
 const reader2 = ref(null)
 const globalError = ref('')
 const isResizing = ref(false)
+const showSettings = ref(false)
 let isSyncing = false
 let syncTimeout = null
 
@@ -236,10 +246,16 @@ function handleWindowResize() {
   reader2.value?.resize?.()
 }
 
-// Watch theme changes to apply to EPUB renditions
-watch(() => settingsStore.theme, () => {
-  // Renditions will be updated via settings-changed event
-}, { immediate: true })
+// Handle settings changed from unified settings panel
+function handleSettingsChanged() {
+  // Apply theme and settings to both readers
+  if (readerStore.fileTypes[0] === 'epub' && reader1.value) {
+    reader1.value.applySettings?.()
+  }
+  if (readerStore.fileTypes[1] === 'epub' && reader2.value) {
+    reader2.value.applySettings?.()
+  }
+}
 </script>
 
 <style>

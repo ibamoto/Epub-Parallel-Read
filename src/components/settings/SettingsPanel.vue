@@ -4,7 +4,7 @@
       <div class="settings-panel" @click.stop>
         <div class="settings-header">
           <h3>表示設定</h3>
-          <span class="pane-indicator">{{ paneIndex === 0 ? '左ペイン' : '右ペイン' }}</span>
+          <span v-if="paneIndex >= 0" class="pane-indicator">{{ paneIndex === 0 ? '左ペイン' : '右ペイン' }}</span>
           <button class="close-btn" @click="$emit('close')">×</button>
         </div>
 
@@ -166,7 +166,7 @@
                 class="theme-btn"
                 :class="{ active: settingsStore.theme === themeOption.value }"
                 :style="{ background: themeOption.bg, color: themeOption.text }"
-                @click="settingsStore.setTheme(themeOption.value)"
+                @click="handleThemeChange(themeOption.value)"
               >
                 {{ themeOption.label }}
               </button>
@@ -196,7 +196,7 @@ const props = defineProps({
   },
   paneIndex: {
     type: Number,
-    required: true,
+    default: -1, // -1 means unified mode (both panes)
   },
 })
 
@@ -216,24 +216,43 @@ const themeOptions = [
   { value: 'sepia', label: 'セピア', bg: '#f4ecd8', text: '#5c4b37' },
 ]
 
-// Local copy of settings for responsive updates
-const localSettings = reactive({ ...settingsStore.paneSettings[props.paneIndex] })
+// Local copy of settings for responsive updates (use pane 0 settings for unified mode)
+const effectivePaneIndex = props.paneIndex >= 0 ? props.paneIndex : 0
+const localSettings = reactive({ ...settingsStore.paneSettings[effectivePaneIndex] })
 
 // Sync local settings when pane settings change
-watch(() => settingsStore.paneSettings[props.paneIndex], (newSettings) => {
+watch(() => settingsStore.paneSettings[effectivePaneIndex], (newSettings) => {
   Object.assign(localSettings, newSettings)
 }, { deep: true })
 
 // Update a single setting
 function updateSetting(key) {
-  settingsStore.updatePaneSettings(props.paneIndex, { [key]: localSettings[key] })
+  // Apply to both panes when unified mode (paneIndex is not provided or -1)
+  if (props.paneIndex === -1) {
+    settingsStore.updatePaneSettings(0, { [key]: localSettings[key] })
+    settingsStore.updatePaneSettings(1, { [key]: localSettings[key] })
+  } else {
+    settingsStore.updatePaneSettings(props.paneIndex, { [key]: localSettings[key] })
+  }
+  emit('settings-changed')
+}
+
+// Handle theme change
+function handleThemeChange(themeValue) {
+  settingsStore.setTheme(themeValue)
   emit('settings-changed')
 }
 
 // Reset to defaults
 function resetSettings() {
-  settingsStore.resetPaneSettings(props.paneIndex)
-  Object.assign(localSettings, settingsStore.paneSettings[props.paneIndex])
+  if (props.paneIndex === -1) {
+    settingsStore.resetPaneSettings(0)
+    settingsStore.resetPaneSettings(1)
+    Object.assign(localSettings, settingsStore.paneSettings[0])
+  } else {
+    settingsStore.resetPaneSettings(props.paneIndex)
+    Object.assign(localSettings, settingsStore.paneSettings[props.paneIndex])
+  }
   emit('settings-changed')
 }
 </script>
