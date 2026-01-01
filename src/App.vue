@@ -217,14 +217,13 @@ function handleKeyDown(event) {
   // Skip if no files are open
   if (!fileType1 && !fileType2) return
 
-  // Prevent scroll sync during keyboard navigation
-  if (settingsStore.syncMode) {
-    isSyncing = true
-    if (syncTimeout) clearTimeout(syncTimeout)
-    syncTimeout = setTimeout(() => {
-      isSyncing = false
-    }, 300)
-  }
+  // Prevent scroll sync during keyboard navigation (must be set BEFORE navigation)
+  // Use longer timeout to wait for smooth scroll animation to complete
+  isSyncing = true
+  if (syncTimeout) clearTimeout(syncTimeout)
+  syncTimeout = setTimeout(() => {
+    isSyncing = false
+  }, 500) // Extended to 500ms to cover smooth scroll animation
 
   // Left/Right arrows: page navigation for both EPUB and PDF
   if (event.key === 'ArrowLeft') {
