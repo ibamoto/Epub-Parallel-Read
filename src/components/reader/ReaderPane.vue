@@ -130,8 +130,9 @@ const fileInfo = computed(() => {
   if (!name) return "";
 
   if (type === "pdf") {
-    const current = readerStore.currentPages[props.paneIndex];
-    const total = readerStore.totalPages[props.paneIndex];
+    // Use pdfReader's local reactive refs for reliable updates
+    const current = pdfReader.currentPage.value;
+    const total = pdfReader.totalPages.value;
     return `${name} (${current}/${total})`;
   }
 
@@ -142,8 +143,9 @@ const fileInfo = computed(() => {
 const progressPercent = computed(() => {
   const type = readerStore.fileTypes[props.paneIndex];
   if (type === "pdf") {
-    const current = readerStore.currentPages[props.paneIndex];
-    const total = readerStore.totalPages[props.paneIndex];
+    // Use pdfReader's local reactive refs for reliable updates
+    const current = pdfReader.currentPage.value;
+    const total = pdfReader.totalPages.value;
     if (total <= 1) return 100;
     return ((current - 1) / (total - 1)) * 100;
   }
