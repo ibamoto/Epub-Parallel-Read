@@ -68,9 +68,11 @@ npm run electron:build
 
 - **フロントエンド**: Vue 3 + Pinia
 - **デスクトップ**: Electron
-- **EPUB レンダリング**: epub.js
+- **EPUB パース**: foliate-js（レンダリングは自前実装）
 - **PDF レンダリング**: PDF.js
 - **ビルドツール**: Vite + electron-builder
+
+> 詳細なアーキテクチャについては [docs/ARCHITECTURE.md](./docs/ARCHITECTURE.md) を参照してください。
 
 ## プロジェクト構成
 
