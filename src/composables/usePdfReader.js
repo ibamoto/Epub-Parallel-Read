@@ -146,12 +146,18 @@ export function usePdfReader(paneIndex) {
     readerStore.setLoading(paneIndex, true)
     readerStore.clearError(paneIndex)
 
+    // Yield to ensure loading UI is displayed before heavy processing
+    await new Promise(resolve => requestAnimationFrame(resolve))
+
     try {
       // Cleanup previous PDF
       cleanup()
 
       // Read file as ArrayBuffer
       const arrayBuffer = await file.arrayBuffer()
+
+      // Yield before heavy PDF parsing
+      await new Promise(resolve => requestAnimationFrame(resolve))
 
       // Load PDF
       const loadingTask = pdfjsLib.getDocument({ data: arrayBuffer })

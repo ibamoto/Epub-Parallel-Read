@@ -408,6 +408,9 @@ export function useEpubReader(paneIndex) {
     readerStore.setLoading(paneIndex, true)
     readerStore.clearError(paneIndex)
 
+    // Yield to ensure loading UI is displayed before heavy processing
+    await yieldToUI()
+
     try {
       await getEpubModule()
       cleanup()
@@ -423,6 +426,8 @@ export function useEpubReader(paneIndex) {
       tempView.style.display = 'none'
       document.body.appendChild(tempView)
 
+      // Yield again before the heavy EPUB parsing
+      await yieldToUI()
       await tempView.open(file)
       book.value = tempView.book
 
