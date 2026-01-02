@@ -245,11 +245,6 @@ export function useEpubReader(paneIndex) {
     }
   }
 
-  // Yield to UI thread to prevent freezing
-  function yieldToUI() {
-    return new Promise(resolve => requestAnimationFrame(resolve))
-  }
-
   // Load and render a section's content
   async function loadSectionContent(section, sectionIndex, placeholder) {
     if (loadedSections.value.has(sectionIndex)) return
@@ -267,16 +262,28 @@ export function useEpubReader(paneIndex) {
 
       const body = doc.body
       if (body) {
-        // Clone content first (fast operation)
+        // Process images
+        const images = body.querySelectorAll('img')
+        for (const img of images) {
+          const src = img.getAttribute('src')
+          if (src && !src.startsWith('data:') && !src.startsWith('http')) {
+            try {
+              const resolvedHref = section.resolveHref?.(src) || src
+              const blob = await book.value.loadBlob?.(resolvedHref)
+              if (blob) {
+                const blobUrl = URL.createObjectURL(blob)
+                blobUrls.value.push(blobUrl)
+                img.src = blobUrl
+              }
+            } catch (e) {
+              // Silently ignore image loading errors
+            }
+          }
+        }
+
         Array.from(body.childNodes).forEach(node => {
           sectionDiv.appendChild(node.cloneNode(true))
         })
-
-        // Process images asynchronously after DOM insertion (non-blocking)
-        const images = sectionDiv.querySelectorAll('img')
-        if (images.length > 0) {
-          processImagesAsync(images, section)
-        }
       }
 
       // Replace placeholder with actual content
@@ -291,34 +298,6 @@ export function useEpubReader(paneIndex) {
     } catch (error) {
       console.error('Error loading section:', sectionIndex, error)
       return null
-    }
-  }
-
-  // Process images asynchronously without blocking UI
-  async function processImagesAsync(images, section) {
-    for (const img of images) {
-      const src = img.getAttribute('src')
-      if (src && !src.startsWith('data:') && !src.startsWith('http')) {
-        // Don't await - process in background
-        loadImageBlob(img, src, section).catch(() => {
-          // Silently ignore image loading errors
-        })
-      }
-    }
-  }
-
-  // Load a single image blob
-  async function loadImageBlob(img, src, section) {
-    try {
-      const resolvedHref = section.resolveHref?.(src) || src
-      const blob = await book.value.loadBlob?.(resolvedHref)
-      if (blob) {
-        const blobUrl = URL.createObjectURL(blob)
-        blobUrls.value.push(blobUrl)
-        img.src = blobUrl
-      }
-    } catch (e) {
-      // Silently ignore
     }
   }
 
@@ -374,44 +353,6 @@ export function useEpubReader(paneIndex) {
     }
   }
 
-  // Load remaining sections progressively for page mode (non-blocking)
-  async function loadRemainingSectionsProgressively(linearSections, sectionContainer, startIndex) {
-    const BATCH_SIZE = 5 // Load N sections per batch
-
-    for (let i = startIndex; i < linearSections.length; i += BATCH_SIZE) {
-      // Check if cleanup was called
-      if (!book.value || !sectionContainer) return
-
-      // Load a batch of sections in parallel
-      const batchEnd = Math.min(i + BATCH_SIZE, linearSections.length)
-      const batchPromises = []
-
-      for (let j = i; j < batchEnd; j++) {
-        if (loadedSections.value.has(j)) continue
-
-        const placeholder = sectionContainer?.querySelector(
-          `.epub-section-placeholder[data-section-index="${j}"]`
-        )
-        if (placeholder) {
-          batchPromises.push(loadSectionContent(linearSections[j], j, placeholder))
-        }
-      }
-
-      // Wait for batch to complete
-      if (batchPromises.length > 0) {
-        await Promise.all(batchPromises)
-      }
-
-      // Yield to UI thread after each batch to keep responsive
-      await yieldToUI()
-
-      // Recalculate pages after each batch
-      if (settingsStore.epubDisplayModes[paneIndex] === 'page') {
-        calculateTotalPages()
-      }
-    }
-  }
-
   // Open EPUB file
   async function openFile(file) {
     if (!containerRef.value) {
@@ -420,9 +361,6 @@ export function useEpubReader(paneIndex) {
 
     readerStore.setLoading(paneIndex, true)
     readerStore.clearError(paneIndex)
-
-    // Yield to ensure loading UI is displayed before heavy processing
-    await yieldToUI()
 
     try {
       await getEpubModule()
@@ -439,8 +377,6 @@ export function useEpubReader(paneIndex) {
       tempView.style.display = 'none'
       document.body.appendChild(tempView)
 
-      // Yield again before the heavy EPUB parsing
-      await yieldToUI()
       await tempView.open(file)
       book.value = tempView.book
 
@@ -482,20 +418,27 @@ export function useEpubReader(paneIndex) {
       const placeholders = contentWrapper.value.querySelectorAll('.epub-section-placeholder')
       placeholders.forEach(p => intersectionObserver?.observe(p))
 
-      // Load initial sections first to show content quickly
-      const initialCount = Math.min(INITIAL_SECTIONS, linearSections.length)
-      for (let i = 0; i < initialCount; i++) {
-        const placeholder = sectionContainer.querySelector(
-          `.epub-section-placeholder[data-section-index="${i}"]`
-        )
-        if (placeholder) {
-          await loadSectionContent(linearSections[i], i, placeholder)
+      // Load sections
+      if (isPageMode) {
+        // Page mode: load all sections for accurate page calculation
+        for (let i = 0; i < linearSections.length; i++) {
+          const placeholder = sectionContainer.querySelector(
+            `.epub-section-placeholder[data-section-index="${i}"]`
+          )
+          if (placeholder) {
+            await loadSectionContent(linearSections[i], i, placeholder)
+          }
         }
-      }
-
-      // For page mode, load remaining sections progressively in background
-      if (isPageMode && linearSections.length > initialCount) {
-        loadRemainingSectionsProgressively(linearSections, sectionContainer, initialCount)
+      } else {
+        // Scroll mode: load initial sections, lazy load the rest
+        for (let i = 0; i < Math.min(INITIAL_SECTIONS, linearSections.length); i++) {
+          const placeholder = contentWrapper.value.querySelector(
+            `.epub-section-placeholder[data-section-index="${i}"]`
+          )
+          if (placeholder) {
+            await loadSectionContent(linearSections[i], i, placeholder)
+          }
+        }
       }
 
       // Cleanup temp view
@@ -732,10 +675,11 @@ export function useEpubReader(paneIndex) {
     setTimeout(() => {
       if (settingsStore.epubDisplayModes[paneIndex] === 'page') {
         // Page mode: restore from page or ratio
-        if (position.currentPage !== undefined && position.displayMode === 'page') {
+        if (position.currentPage !== undefined && position.displayMode === 'page' && !position.switchingMode) {
+          // Same mode, use page directly
           goToPage(position.currentPage)
         } else if (position.scrollRatio !== undefined) {
-          // Convert scroll ratio to page
+          // Convert scroll ratio to page (works for mode switch)
           const targetPage = Math.round(position.scrollRatio * (totalPages.value - 1))
           goToPage(targetPage)
         }
@@ -915,14 +859,14 @@ export function useEpubReader(paneIndex) {
         const scrollInfo = getScrollInfo()
         const positionRatio = scrollInfo?.scrollRatio || 0
 
-        // Get the file to reopen
-        const currentBook = book.value
-
         // Cleanup and rebuild
         const savedFile = readerStore.files[paneIndex]
         if (savedFile) {
-          // Store position for restore
-          readerStore.setCurrentLocation(paneIndex, { scrollRatio: positionRatio })
+          // Store position ratio for restore with mode switch flag
+          readerStore.setCurrentLocation(paneIndex, {
+            scrollRatio: positionRatio,
+            switchingMode: true
+          })
 
           // Reopen the file with new display mode
           await openFile(savedFile)
