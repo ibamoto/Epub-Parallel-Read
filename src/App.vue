@@ -70,6 +70,7 @@ const globalError = ref('')
 const isResizing = ref(false)
 const showSettings = ref(false)
 let isSyncing = false
+let isNavigating = false
 let syncTimeout = null
 
 // Theme class
@@ -93,6 +94,8 @@ onUnmounted(() => {
   window.removeEventListener('keydown', handleKeyDown)
   window.removeEventListener('resize', handleWindowResize)
   if (syncTimeout) clearTimeout(syncTimeout)
+  isSyncing = false
+  isNavigating = false
 })
 
 // Handle file selection from control bar
@@ -128,7 +131,8 @@ async function handleHistorySelect(paneIndex, file) {
 
 // Handle scroll sync
 function handleScroll(sourceIndex) {
-  if (!settingsStore.syncMode || isSyncing) return
+  // Skip sync if already syncing, navigating, or sync mode is off
+  if (!settingsStore.syncMode || isSyncing || isNavigating) return
 
   isSyncing = true
 
@@ -137,18 +141,25 @@ function handleScroll(sourceIndex) {
 
   const scrollInfo = source?.getScrollInfo?.()
   if (scrollInfo && target?.setScrollByRatio) {
+    // setScrollByRatio is async, so we need a longer timeout
     target.setScrollByRatio(scrollInfo.scrollRatio * settingsStore.syncSensitivity)
   }
 
+  // Clear any existing timeout
   if (syncTimeout) clearTimeout(syncTimeout)
+
+  // Use longer timeout to cover async section loading (300ms should be enough)
   syncTimeout = setTimeout(() => {
     isSyncing = false
-  }, 100)
+  }, 300)
 }
 
 // Handle navigation sync
 function handleNavigate(sourceIndex, direction) {
-  if (!settingsStore.syncMode) return
+  if (!settingsStore.syncMode || isNavigating) return
+
+  // Set navigating flag to prevent scroll sync during navigation
+  isNavigating = true
 
   const target = sourceIndex === 0 ? reader2.value : reader1.value
   if (direction === 'next') {
@@ -156,6 +167,11 @@ function handleNavigate(sourceIndex, direction) {
   } else if (direction === 'prev') {
     target?.prev?.()
   }
+
+  // Reset navigating flag after navigation completes
+  setTimeout(() => {
+    isNavigating = false
+  }, 500)
 }
 
 // Resize handling
