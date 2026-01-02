@@ -41,9 +41,9 @@
           class="reader-view"
         ></div>
 
-        <!-- Progress Bar -->
+        <!-- Progress Bar (clickable for navigation) -->
         <div v-if="showProgress" class="progress-bar-container">
-          <div class="progress-bar">
+          <div class="progress-bar" @click="handleProgressClick" ref="progressBar">
             <div class="progress-fill" :style="{ width: progressPercent + '%' }"></div>
           </div>
           <span class="progress-text">{{ Math.round(progressPercent) }}%</span>
@@ -109,6 +109,7 @@ const readerStore = useReaderStore();
 const settingsStore = useSettingsStore();
 
 const readerView = ref(null);
+const progressBar = ref(null);
 const isDragging = ref(false);
 const scrollProgress = ref(0);
 
@@ -152,6 +153,25 @@ const currentDisplayMode = computed(() => {
 
 function setDisplayMode(mode) {
   settingsStore.setEpubDisplayMode(props.paneIndex, mode);
+}
+
+// Handle click on progress bar to navigate to position
+function handleProgressClick(event) {
+  if (!progressBar.value) return;
+
+  const rect = progressBar.value.getBoundingClientRect();
+  const clickX = event.clientX - rect.left;
+  const ratio = Math.max(0, Math.min(1, clickX / rect.width));
+
+  // Navigate to the clicked position
+  const type = readerStore.fileTypes[props.paneIndex];
+  if (type === 'epub') {
+    epubReader.setScrollByRatio(ratio);
+    scrollProgress.value = ratio;
+  } else if (type === 'pdf') {
+    const targetPage = Math.round(ratio * (pdfReader.totalPages.value - 1)) + 1;
+    pdfReader.goToPage(targetPage);
+  }
 }
 
 const fileInfo = computed(() => {
@@ -198,6 +218,7 @@ onMounted(() => {
   // Set up scroll callback for EPUB sync
   epubReader.setOnScroll(() => {
     emit("scroll", props.paneIndex);
+    updateScrollProgress();
   });
 });
 
@@ -412,6 +433,12 @@ onUnmounted(() => {
   background: var(--border-color);
   border-radius: 3px;
   overflow: hidden;
+  cursor: pointer;
+  transition: height 0.15s ease;
+}
+
+.progress-bar:hover {
+  height: 10px;
 }
 
 .progress-fill {

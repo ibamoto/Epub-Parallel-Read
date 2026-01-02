@@ -164,6 +164,21 @@ export function useEpubReader(paneIndex) {
         margin-top: 1em;
         margin-bottom: 0.5em;
       }
+
+      /* Scrollbar styling for epub content */
+      .epub-content-${paneIndex}::-webkit-scrollbar {
+        width: 8px;
+      }
+      .epub-content-${paneIndex}::-webkit-scrollbar-track {
+        background: ${colors.background};
+      }
+      .epub-content-${paneIndex}::-webkit-scrollbar-thumb {
+        background: ${colors.text}40;
+        border-radius: 4px;
+      }
+      .epub-content-${paneIndex}::-webkit-scrollbar-thumb:hover {
+        background: ${colors.text}60;
+      }
     `
 
     return styles
@@ -465,21 +480,32 @@ export function useEpubReader(paneIndex) {
           columnWrapper.value.style.columnWidth = `${containerWidth}px`
         }
 
-        setTimeout(() => {
+        // Wait for layout to stabilize, calculate pages, then restore position
+        setTimeout(async () => {
           calculateTotalPages()
+
+          // Wait for page calculation to complete
+          await new Promise(resolve => requestAnimationFrame(() => {
+            requestAnimationFrame(resolve)
+          }))
+
           // Restore position AFTER pages are calculated
           if (savedLocation && typeof savedLocation === 'object') {
-            setTimeout(() => restorePosition(savedLocation), 50)
+            await restorePosition(savedLocation)
           }
           // Setup display mode watcher
           setupDisplayModeWatcher()
         }, 150)
       } else {
-        // Scroll mode: restore position immediately
+        // Scroll mode: restore position after sections load
         if (savedLocation && typeof savedLocation === 'object') {
-          restorePosition(savedLocation)
+          // Use async restore which handles section loading
+          restorePosition(savedLocation).then(() => {
+            setupDisplayModeWatcher()
+          })
+        } else {
+          setupDisplayModeWatcher()
         }
-        setupDisplayModeWatcher()
       }
 
     } catch (error) {
@@ -507,30 +533,52 @@ export function useEpubReader(paneIndex) {
     // Normalize path for comparison (remove leading ./ or /)
     const normalizePath = (p) => {
       if (!p) return ''
-      return p.replace(/^\.?\//, '').replace(/\/$/, '')
+      return p.replace(/^\.?\//, '').replace(/\/$/, '').toLowerCase()
     }
 
     const normalizedPath = normalizePath(path)
+    const normalizedHref = normalizePath(href)
 
     // Get linear sections (same order as displayed)
     const linearSections = sections.value.filter(s => s.linear !== 'no')
+
+    // Helper function to scroll to element in scroll mode
+    const scrollToElement = (element) => {
+      if (!contentWrapper.value) return
+
+      // Get element's position relative to the scroll container
+      const containerRect = contentWrapper.value.getBoundingClientRect()
+      const elementRect = element.getBoundingClientRect()
+
+      // Calculate the offset from container top (accounting for current scroll)
+      const currentScroll = contentWrapper.value.scrollTop
+      const elementTop = elementRect.top - containerRect.top + currentScroll
+
+      // Scroll to position with a small offset from top
+      contentWrapper.value.scrollTo({
+        top: Math.max(0, elementTop - 20),
+        behavior: 'smooth'
+      })
+    }
 
     // Find matching section
     for (let i = 0; i < linearSections.length; i++) {
       const section = linearSections[i]
       const sectionHref = normalizePath(section.href || '')
+      const sectionId = (section.id || '').toLowerCase()
 
       // Check if href matches (with various path formats)
       const hrefMatches =
         sectionHref === normalizedPath ||
-        sectionHref === normalizePath(href) ||
+        sectionHref === normalizedHref ||
         sectionHref.endsWith('/' + normalizedPath) ||
         normalizedPath.endsWith('/' + sectionHref) ||
         sectionHref.endsWith(normalizedPath) ||
         normalizedPath.endsWith(sectionHref) ||
-        section.id === href ||
-        section.id === path ||
-        section.id === normalizedPath
+        (normalizedPath && sectionHref.includes(normalizedPath)) ||
+        (normalizedPath && normalizedPath.includes(sectionHref) && sectionHref.length > 0) ||
+        sectionId === normalizedHref ||
+        sectionId === normalizedPath
 
       if (hrefMatches) {
         const sectionEl = container.querySelector(`[data-section-index="${i}"]`)
@@ -546,12 +594,16 @@ export function useEpubReader(paneIndex) {
             let targetElement = loadedEl
             if (fragment) {
               // Try various selectors for fragment
-              const fragmentEl =
-                loadedEl.querySelector(`#${CSS.escape(fragment)}`) ||
-                loadedEl.querySelector(`[name="${fragment}"]`) ||
-                loadedEl.querySelector(`[id="${fragment}"]`)
-              if (fragmentEl) {
-                targetElement = fragmentEl
+              try {
+                const fragmentEl =
+                  loadedEl.querySelector(`#${CSS.escape(fragment)}`) ||
+                  loadedEl.querySelector(`[name="${fragment}"]`) ||
+                  loadedEl.querySelector(`[id="${fragment}"]`)
+                if (fragmentEl) {
+                  targetElement = fragmentEl
+                }
+              } catch (e) {
+                // CSS.escape might fail with invalid selectors
               }
             }
 
@@ -559,13 +611,17 @@ export function useEpubReader(paneIndex) {
               // Page mode: calculate which page contains this element
               navigateToElement(targetElement)
             } else {
-              targetElement.scrollIntoView({ behavior: 'smooth' })
+              // Scroll mode: use custom scroll for reliability
+              scrollToElement(targetElement)
             }
             savePosition()
           }
 
           if (!isLoaded) {
-            loadSectionsInRange(i, i + BUFFER_SECTIONS).then(navigateToSection)
+            loadSectionsInRange(i, i + BUFFER_SECTIONS).then(() => {
+              // Small delay to ensure DOM is updated
+              setTimeout(navigateToSection, 50)
+            })
           } else {
             navigateToSection()
           }
@@ -578,17 +634,21 @@ export function useEpubReader(paneIndex) {
     const searchId = fragment || normalizedPath || href
     if (searchId) {
       // Search across all loaded sections
-      const element =
-        container.querySelector(`#${CSS.escape(searchId)}`) ||
-        container.querySelector(`[name="${searchId}"]`) ||
-        container.querySelector(`[id="${searchId}"]`)
-      if (element) {
-        if (isPageMode) {
-          navigateToElement(element)
-        } else {
-          element.scrollIntoView({ behavior: 'smooth' })
+      try {
+        const element =
+          container.querySelector(`#${CSS.escape(searchId)}`) ||
+          container.querySelector(`[name="${searchId}"]`) ||
+          container.querySelector(`[id="${searchId}"]`)
+        if (element) {
+          if (isPageMode) {
+            navigateToElement(element)
+          } else {
+            scrollToElement(element)
+          }
+          savePosition()
         }
-        savePosition()
+      } catch (e) {
+        // CSS.escape might fail with invalid selectors
       }
     }
   }
@@ -671,50 +731,106 @@ export function useEpubReader(paneIndex) {
         scrollRatio: pageRatio
       })
     } else {
-      // Scroll mode: save scroll ratio
+      // Scroll mode: calculate section-based ratio for accurate mode switching
       const el = contentWrapper.value
-      const scrollRatio = el.scrollTop / Math.max(1, el.scrollHeight - el.clientHeight)
-
       const sectionEls = el.querySelectorAll('.epub-section')
-      let currentSection = 0
+      const linearSections = sections.value.filter(s => s.linear !== 'no')
+      const totalSections = linearSections.length
+
+      let currentSectionIndex = 0
+      let sectionRatio = 0
+
+      // Find current section based on scroll position
       for (let i = 0; i < sectionEls.length; i++) {
-        const rect = sectionEls[i].getBoundingClientRect()
-        if (rect.top <= 100) currentSection = i
+        const section = sectionEls[i]
+        const rect = section.getBoundingClientRect()
+        const containerRect = el.getBoundingClientRect()
+
+        if (rect.top <= containerRect.top + 50) {
+          currentSectionIndex = parseInt(section.dataset.sectionIndex, 10) || i
+
+          // Calculate ratio within this section
+          if (rect.height > 0) {
+            const visibleTop = containerRect.top - rect.top
+            sectionRatio = Math.min(1, Math.max(0, visibleTop / rect.height))
+          }
+        }
       }
+
+      // Calculate overall scroll ratio based on sections
+      const overallRatio = totalSections > 0
+        ? (currentSectionIndex + sectionRatio) / totalSections
+        : 0
 
       readerStore.setCurrentLocation(paneIndex, {
         displayMode: 'scroll',
-        sectionIndex: currentSection,
-        scrollRatio
+        sectionIndex: currentSectionIndex,
+        sectionRatio: sectionRatio,
+        scrollRatio: overallRatio
       })
     }
   }
 
-  function restorePosition(position) {
+  async function restorePosition(position) {
     if (!contentWrapper.value || !position) return
 
-    setTimeout(() => {
-      const isPageMode = settingsStore.epubDisplayModes[paneIndex] === 'page'
+    const isPageMode = settingsStore.epubDisplayModes[paneIndex] === 'page'
 
-      if (isPageMode) {
-        // Page mode: restore from page or ratio
-        if (position.currentPage !== undefined && position.displayMode === 'page' && !position.switchingMode) {
-          // Same mode, use page directly
-          goToPage(position.currentPage)
-        } else if (position.scrollRatio !== undefined) {
-          // Convert scroll ratio to page (works for mode switch)
-          const targetPage = Math.round(position.scrollRatio * (totalPages.value - 1))
-          goToPage(targetPage)
-        }
-      } else {
-        // Scroll mode: restore scroll position
-        if (position.scrollRatio !== undefined) {
-          const el = contentWrapper.value
-          const maxScroll = el.scrollHeight - el.clientHeight
-          el.scrollTop = position.scrollRatio * maxScroll
-        }
+    if (isPageMode) {
+      // Page mode: wait for pages to be calculated, then restore
+      await new Promise(resolve => setTimeout(resolve, 100))
+
+      if (position.currentPage !== undefined && position.displayMode === 'page' && !position.switchingMode) {
+        // Same mode, use page directly
+        goToPage(position.currentPage)
+      } else if (position.scrollRatio !== undefined) {
+        // Convert scroll ratio to page (works for mode switch)
+        const targetPage = Math.round(position.scrollRatio * (totalPages.value - 1))
+        goToPage(targetPage)
       }
-    }, 100)
+    } else {
+      // Scroll mode: use section-based position for accurate restoration
+      const linearSections = sections.value.filter(s => s.linear !== 'no')
+      const totalSections = linearSections.length
+
+      if (totalSections === 0) return
+
+      // Determine target section
+      let targetSectionIndex = 0
+      let sectionRatio = 0
+
+      if (position.sectionIndex !== undefined && position.displayMode === 'scroll' && !position.switchingMode) {
+        // Same mode - use section info directly
+        targetSectionIndex = position.sectionIndex
+        sectionRatio = position.sectionRatio || 0
+      } else if (position.scrollRatio !== undefined && position.scrollRatio > 0) {
+        // Mode switch or generic ratio - calculate from ratio
+        const scaledPosition = position.scrollRatio * totalSections
+        targetSectionIndex = Math.min(Math.floor(scaledPosition), totalSections - 1)
+        sectionRatio = scaledPosition - targetSectionIndex
+      }
+
+      // Load sections up to and beyond target
+      await loadSectionsInRange(0, Math.min(targetSectionIndex + BUFFER_SECTIONS, totalSections - 1))
+
+      // Wait for DOM to update
+      await new Promise(resolve => setTimeout(resolve, 100))
+
+      const container = contentWrapper.value
+      if (!container) return
+
+      // Find the target section element
+      const targetSectionEl = container.querySelector(`[data-section-index="${targetSectionIndex}"]`)
+      if (targetSectionEl) {
+        // Calculate scroll position within section
+        const sectionOffset = targetSectionEl.offsetHeight * sectionRatio
+
+        container.scrollTo({
+          top: targetSectionEl.offsetTop + sectionOffset,
+          behavior: 'auto' // Instant scroll for restore
+        })
+      }
+    }
   }
 
   function resize() {
@@ -725,12 +841,16 @@ export function useEpubReader(paneIndex) {
   }
 
   function handleScrollEvent() {
-    if (!onScrollCallback) return
     if (scrollThrottleTimer) return
     scrollThrottleTimer = setTimeout(() => {
       scrollThrottleTimer = null
-      onScrollCallback()
-    }, 16)
+      // Save position on scroll
+      savePosition()
+      // Call scroll callback if set
+      if (onScrollCallback) {
+        onScrollCallback()
+      }
+    }, 100) // Increased throttle time for position saving
   }
 
   function setOnScroll(callback) {
@@ -837,19 +957,46 @@ export function useEpubReader(paneIndex) {
         totalPages: totalPages.value,
       }
     } else {
-      // Scroll mode: return scroll-based info
+      // Scroll mode: calculate section-based ratio
       const el = contentWrapper.value
+      const sectionEls = el.querySelectorAll('.epub-section')
+      const linearSections = sections.value.filter(s => s.linear !== 'no')
+      const totalSections = linearSections.length
+
+      let currentSectionIndex = 0
+      let sectionRatio = 0
+
+      for (let i = 0; i < sectionEls.length; i++) {
+        const section = sectionEls[i]
+        const rect = section.getBoundingClientRect()
+        const containerRect = el.getBoundingClientRect()
+
+        if (rect.top <= containerRect.top + 50) {
+          currentSectionIndex = parseInt(section.dataset.sectionIndex, 10) || i
+          if (rect.height > 0) {
+            const visibleTop = containerRect.top - rect.top
+            sectionRatio = Math.min(1, Math.max(0, visibleTop / rect.height))
+          }
+        }
+      }
+
+      const overallRatio = totalSections > 0
+        ? (currentSectionIndex + sectionRatio) / totalSections
+        : 0
+
       return {
         scrollTop: el.scrollTop,
         scrollHeight: el.scrollHeight,
         clientHeight: el.clientHeight,
-        scrollRatio: el.scrollTop / Math.max(1, el.scrollHeight - el.clientHeight),
+        scrollRatio: overallRatio,
         displayMode: 'scroll',
+        sectionIndex: currentSectionIndex,
+        totalSections: totalSections,
       }
     }
   }
 
-  function setScrollByRatio(ratio) {
+  async function setScrollByRatio(ratio) {
     if (!contentWrapper.value) return
 
     if (settingsStore.epubDisplayModes[paneIndex] === 'page') {
@@ -858,12 +1005,45 @@ export function useEpubReader(paneIndex) {
       if (targetPage !== currentPage.value) {
         currentPage.value = targetPage
         updatePagePosition()
+        savePosition()
       }
     } else {
-      // Scroll mode: set scroll position
-      const el = contentWrapper.value
-      const maxScroll = el.scrollHeight - el.clientHeight
-      el.scrollTop = ratio * maxScroll
+      // Scroll mode: navigate to section based on ratio
+      const linearSections = sections.value.filter(s => s.linear !== 'no')
+      const totalSections = linearSections.length
+
+      if (totalSections === 0) return
+
+      // Calculate target section based on ratio
+      const targetSectionIndex = Math.min(
+        Math.floor(ratio * totalSections),
+        totalSections - 1
+      )
+
+      // Load all sections up to and including the target
+      await loadSectionsInRange(0, targetSectionIndex + BUFFER_SECTIONS)
+
+      // Wait for DOM to update
+      await new Promise(resolve => setTimeout(resolve, 100))
+
+      const container = contentWrapper.value
+      if (!container) return
+
+      // Find the target section element
+      const targetSectionEl = container.querySelector(`[data-section-index="${targetSectionIndex}"]`)
+      if (targetSectionEl) {
+        // Calculate position within the section based on remaining ratio
+        const sectionRatio = (ratio * totalSections) - targetSectionIndex
+        const sectionOffset = targetSectionEl.offsetHeight * sectionRatio
+
+        // Scroll to section position
+        container.scrollTo({
+          top: targetSectionEl.offsetTop + sectionOffset,
+          behavior: 'smooth'
+        })
+
+        savePosition()
+      }
     }
   }
 
