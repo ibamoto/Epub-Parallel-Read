@@ -237,14 +237,16 @@ export function usePdfReader(paneIndex) {
     }
   }
 
-  // Next page
+  // Next page - uses pdfPageAmounts setting
   function next() {
-    goToPage(currentPage.value + 1)
+    const pageAmount = settingsStore.pdfPageAmounts[paneIndex] || 1
+    goToPage(currentPage.value + pageAmount)
   }
 
-  // Previous page
+  // Previous page - uses pdfPageAmounts setting
   function prev() {
-    goToPage(currentPage.value - 1)
+    const pageAmount = settingsStore.pdfPageAmounts[paneIndex] || 1
+    goToPage(currentPage.value - pageAmount)
   }
 
   // Set scale and re-render
