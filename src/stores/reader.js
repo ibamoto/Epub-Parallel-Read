@@ -9,6 +9,7 @@ export const useReaderStore = defineStore('reader', () => {
   const renditions = ref([null, null])
   const fileTypes = ref([null, null]) // 'epub' | 'pdf' | null
   const fileNames = ref(['', ''])
+  const files = ref([null, null]) // Store File objects (not persisted)
   const tocs = ref([[], []])
   const currentLocations = ref([null, null])
   const totalPages = ref([0, 0]) // For PDF
@@ -43,6 +44,11 @@ export const useReaderStore = defineStore('reader', () => {
   // Set file name
   function setFileName(paneIndex, name) {
     fileNames.value[paneIndex] = name
+  }
+
+  // Set file object (for reopening on display mode change)
+  function setFile(paneIndex, file) {
+    files.value[paneIndex] = file
   }
 
   // Set current location (CFI for EPUB, page for PDF)
@@ -107,6 +113,7 @@ export const useReaderStore = defineStore('reader', () => {
     renditions.value[paneIndex] = null
     fileTypes.value[paneIndex] = null
     fileNames.value[paneIndex] = ''
+    files.value[paneIndex] = null
     tocs.value[paneIndex] = []
     currentLocations.value[paneIndex] = null
     totalPages.value[paneIndex] = 0
@@ -154,6 +161,7 @@ export const useReaderStore = defineStore('reader', () => {
     renditions,
     fileTypes,
     fileNames,
+    files,
     tocs,
     currentLocations,
     totalPages,
@@ -168,6 +176,7 @@ export const useReaderStore = defineStore('reader', () => {
     setRendition,
     setToc,
     setFileName,
+    setFile,
     setCurrentLocation,
     setLoading,
     setError,

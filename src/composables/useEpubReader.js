@@ -1,4 +1,4 @@
-import { ref, onUnmounted } from 'vue'
+import { ref, watch, onUnmounted } from 'vue'
 import { useReaderStore } from '../stores/reader'
 import { useSettingsStore } from '../stores/settings'
 
@@ -31,6 +31,12 @@ export function useEpubReader(paneIndex) {
   let scrollThrottleTimer = null
   let intersectionObserver = null
 
+  // Page mode state
+  const currentPage = ref(0)
+  const totalPages = ref(1)
+  const columnWrapper = ref(null) // Inner wrapper for column layout
+  let displayModeWatcher = null
+
   // Process TOC to flat structure
   function processToc(toc) {
     if (!toc) return []
@@ -53,16 +59,16 @@ export function useEpubReader(paneIndex) {
   function generateContentStyles() {
     const colors = settingsStore.getThemeColors()
     const settings = settingsStore.paneSettings[paneIndex]
+    const isPageMode = settingsStore.epubDisplayMode === 'page'
     const fontFamily = settings.fontFamily === 'system-ui'
       ? 'system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen, Ubuntu, Cantarell, "Open Sans", "Helvetica Neue", sans-serif'
       : settings.fontFamily
 
-    return `
+    // Base styles for both modes
+    let styles = `
       .epub-content-${paneIndex} {
         width: 100%;
         height: 100%;
-        overflow-y: auto;
-        overflow-x: hidden;
         background: ${colors.background};
         color: ${colors.text};
         font-family: ${fontFamily};
@@ -71,25 +77,73 @@ export function useEpubReader(paneIndex) {
         line-height: ${settings.lineHeight};
         letter-spacing: ${settings.letterSpacing}em;
         text-align: ${settings.textAlign};
-        padding: ${settings.marginTop}px ${settings.marginRight}px ${settings.marginBottom}px ${settings.marginLeft}px;
         box-sizing: border-box;
       }
+    `
 
-      .epub-content-${paneIndex} .epub-section {
-        margin-bottom: 2em;
-        padding-bottom: 1em;
-        border-bottom: 1px solid ${colors.text}20;
-      }
+    if (isPageMode) {
+      // Page mode: use CSS columns for pagination
+      styles += `
+        .epub-content-${paneIndex} {
+          overflow: hidden;
+          padding: 0;
+        }
 
-      .epub-content-${paneIndex} .epub-section-placeholder {
-        min-height: 200px;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        color: ${colors.text}40;
-        font-size: 0.9em;
-      }
+        .epub-content-${paneIndex} .epub-column-wrapper {
+          height: 100%;
+          column-width: calc(100% - ${settings.marginLeft + settings.marginRight}px);
+          column-gap: ${settings.marginLeft + settings.marginRight}px;
+          column-fill: auto;
+          padding: ${settings.marginTop}px ${settings.marginRight}px ${settings.marginBottom}px ${settings.marginLeft}px;
+          box-sizing: border-box;
+          transition: transform 0.3s ease;
+        }
 
+        .epub-content-${paneIndex} .epub-section {
+          break-inside: avoid-column;
+          margin-bottom: 2em;
+          padding-bottom: 1em;
+          border-bottom: 1px solid ${colors.text}20;
+        }
+
+        .epub-content-${paneIndex} .epub-section-placeholder {
+          min-height: 200px;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          color: ${colors.text}40;
+          font-size: 0.9em;
+          break-inside: avoid;
+        }
+      `
+    } else {
+      // Scroll mode: standard scrollable container
+      styles += `
+        .epub-content-${paneIndex} {
+          overflow-y: auto;
+          overflow-x: hidden;
+          padding: ${settings.marginTop}px ${settings.marginRight}px ${settings.marginBottom}px ${settings.marginLeft}px;
+        }
+
+        .epub-content-${paneIndex} .epub-section {
+          margin-bottom: 2em;
+          padding-bottom: 1em;
+          border-bottom: 1px solid ${colors.text}20;
+        }
+
+        .epub-content-${paneIndex} .epub-section-placeholder {
+          min-height: 200px;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          color: ${colors.text}40;
+          font-size: 0.9em;
+        }
+      `
+    }
+
+    // Common element styles
+    styles += `
       .epub-content-${paneIndex} a { color: ${colors.link}; }
       .epub-content-${paneIndex} img { max-width: 100%; height: auto; }
       .epub-content-${paneIndex} p {
@@ -107,15 +161,79 @@ export function useEpubReader(paneIndex) {
         margin-bottom: 0.5em;
       }
     `
+
+    return styles
   }
 
   function updateStyles() {
     if (!styleElement.value) return
     styleElement.value.textContent = generateContentStyles()
+    // Recalculate pages when styles change in page mode
+    if (settingsStore.epubDisplayMode === 'page') {
+      setTimeout(() => calculateTotalPages(), 50)
+    }
   }
 
   function applyTheme() { updateStyles() }
   function applySettings() { updateStyles() }
+
+  // Page mode helper functions
+  function calculateTotalPages() {
+    if (!columnWrapper.value || !contentWrapper.value) return
+
+    const wrapper = columnWrapper.value
+    const container = contentWrapper.value
+    const containerWidth = container.clientWidth
+
+    if (containerWidth === 0) return
+
+    // Total scrollable width divided by container width = total pages
+    const scrollWidth = wrapper.scrollWidth
+    const pages = Math.max(1, Math.ceil(scrollWidth / containerWidth))
+    totalPages.value = pages
+
+    // Ensure current page is within bounds
+    if (currentPage.value >= pages) {
+      currentPage.value = pages - 1
+      updatePagePosition()
+    }
+  }
+
+  function updatePagePosition() {
+    if (!columnWrapper.value || !contentWrapper.value) return
+
+    const containerWidth = contentWrapper.value.clientWidth
+    const offset = -currentPage.value * containerWidth
+    columnWrapper.value.style.transform = `translateX(${offset}px)`
+
+    // Trigger scroll callback for sync
+    if (onScrollCallback) {
+      onScrollCallback()
+    }
+  }
+
+  function goToPage(page) {
+    if (!isReady.value) return
+
+    const newPage = Math.max(0, Math.min(page, totalPages.value - 1))
+    if (newPage !== currentPage.value) {
+      currentPage.value = newPage
+      updatePagePosition()
+      savePosition()
+    }
+  }
+
+  function nextPage() {
+    if (currentPage.value < totalPages.value - 1) {
+      goToPage(currentPage.value + 1)
+    }
+  }
+
+  function prevPage() {
+    if (currentPage.value > 0) {
+      goToPage(currentPage.value - 1)
+    }
+  }
 
   // Load and render a section's content
   async function loadSectionContent(section, sectionIndex, placeholder) {
@@ -259,12 +377,25 @@ export function useEpubReader(paneIndex) {
       contentWrapper.value = document.createElement('div')
       contentWrapper.value.className = `epub-content-${paneIndex}`
       containerRef.value.appendChild(contentWrapper.value)
-      contentWrapper.value.addEventListener('scroll', handleScrollEvent)
+
+      const isPageMode = settingsStore.epubDisplayMode === 'page'
+
+      // For page mode, create an inner column wrapper
+      let sectionContainer
+      if (isPageMode) {
+        columnWrapper.value = document.createElement('div')
+        columnWrapper.value.className = 'epub-column-wrapper'
+        contentWrapper.value.appendChild(columnWrapper.value)
+        sectionContainer = columnWrapper.value
+      } else {
+        contentWrapper.value.addEventListener('scroll', handleScrollEvent)
+        sectionContainer = contentWrapper.value
+      }
 
       // Create placeholders for all sections
       linearSections.forEach((_, index) => {
         const placeholder = createPlaceholder(index)
-        contentWrapper.value.appendChild(placeholder)
+        sectionContainer.appendChild(placeholder)
       })
 
       // Setup lazy loading observer
@@ -274,13 +405,26 @@ export function useEpubReader(paneIndex) {
       const placeholders = contentWrapper.value.querySelectorAll('.epub-section-placeholder')
       placeholders.forEach(p => intersectionObserver?.observe(p))
 
-      // Load initial sections immediately
-      for (let i = 0; i < Math.min(INITIAL_SECTIONS, linearSections.length); i++) {
-        const placeholder = contentWrapper.value.querySelector(
-          `.epub-section-placeholder[data-section-index="${i}"]`
-        )
-        if (placeholder) {
-          await loadSectionContent(linearSections[i], i, placeholder)
+      // Load sections
+      if (isPageMode) {
+        // Page mode: load all sections for accurate page calculation
+        for (let i = 0; i < linearSections.length; i++) {
+          const placeholder = sectionContainer.querySelector(
+            `.epub-section-placeholder[data-section-index="${i}"]`
+          )
+          if (placeholder) {
+            await loadSectionContent(linearSections[i], i, placeholder)
+          }
+        }
+      } else {
+        // Scroll mode: load initial sections, lazy load the rest
+        for (let i = 0; i < Math.min(INITIAL_SECTIONS, linearSections.length); i++) {
+          const placeholder = contentWrapper.value.querySelector(
+            `.epub-section-placeholder[data-section-index="${i}"]`
+          )
+          if (placeholder) {
+            await loadSectionContent(linearSections[i], i, placeholder)
+          }
         }
       }
 
@@ -290,6 +434,7 @@ export function useEpubReader(paneIndex) {
 
       readerStore.setBook(paneIndex, book.value, 'epub')
       readerStore.setFileName(paneIndex, file.name)
+      readerStore.setFile(paneIndex, file)
 
       // Restore saved position
       const savedLocation = readerStore.currentLocations[paneIndex]
@@ -298,6 +443,17 @@ export function useEpubReader(paneIndex) {
       }
 
       isReady.value = true
+
+      // Page mode: calculate pages after content is loaded
+      if (isPageMode) {
+        setTimeout(() => {
+          calculateTotalPages()
+          // Setup display mode watcher
+          setupDisplayModeWatcher()
+        }, 100)
+      } else {
+        setupDisplayModeWatcher()
+      }
 
     } catch (error) {
       console.error(`Error opening EPUB ${paneIndex}:`, error)
@@ -340,52 +496,108 @@ export function useEpubReader(paneIndex) {
 
   function next() {
     if (!contentWrapper.value) return
-    const viewportHeight = contentWrapper.value.clientHeight
-    contentWrapper.value.scrollBy({ top: viewportHeight * 0.9, behavior: 'smooth' })
-    savePosition()
+
+    if (settingsStore.epubDisplayMode === 'page') {
+      nextPage()
+    } else {
+      const viewportHeight = contentWrapper.value.clientHeight
+      contentWrapper.value.scrollBy({ top: viewportHeight * 0.9, behavior: 'smooth' })
+      savePosition()
+    }
   }
 
   function prev() {
     if (!contentWrapper.value) return
-    const viewportHeight = contentWrapper.value.clientHeight
-    contentWrapper.value.scrollBy({ top: -viewportHeight * 0.9, behavior: 'smooth' })
-    savePosition()
+
+    if (settingsStore.epubDisplayMode === 'page') {
+      prevPage()
+    } else {
+      const viewportHeight = contentWrapper.value.clientHeight
+      contentWrapper.value.scrollBy({ top: -viewportHeight * 0.9, behavior: 'smooth' })
+      savePosition()
+    }
   }
 
   function scrollBy(distance) {
     if (!contentWrapper.value) return
-    contentWrapper.value.scrollBy({ top: distance, behavior: 'smooth' })
-    savePosition()
+
+    if (settingsStore.epubDisplayMode === 'page') {
+      // In page mode, interpret scroll distance as page navigation
+      if (distance > 0) {
+        nextPage()
+      } else if (distance < 0) {
+        prevPage()
+      }
+    } else {
+      contentWrapper.value.scrollBy({ top: distance, behavior: 'smooth' })
+      savePosition()
+    }
   }
 
   function savePosition() {
     if (!contentWrapper.value) return
-    const el = contentWrapper.value
-    const scrollRatio = el.scrollTop / Math.max(1, el.scrollHeight - el.clientHeight)
 
-    const sectionEls = el.querySelectorAll('.epub-section')
-    let currentSection = 0
-    for (let i = 0; i < sectionEls.length; i++) {
-      const rect = sectionEls[i].getBoundingClientRect()
-      if (rect.top <= 100) currentSection = i
+    if (settingsStore.epubDisplayMode === 'page') {
+      // Page mode: save page ratio
+      const pageRatio = totalPages.value > 1
+        ? currentPage.value / (totalPages.value - 1)
+        : 0
+      readerStore.setCurrentLocation(paneIndex, {
+        displayMode: 'page',
+        currentPage: currentPage.value,
+        totalPages: totalPages.value,
+        scrollRatio: pageRatio
+      })
+    } else {
+      // Scroll mode: save scroll ratio
+      const el = contentWrapper.value
+      const scrollRatio = el.scrollTop / Math.max(1, el.scrollHeight - el.clientHeight)
+
+      const sectionEls = el.querySelectorAll('.epub-section')
+      let currentSection = 0
+      for (let i = 0; i < sectionEls.length; i++) {
+        const rect = sectionEls[i].getBoundingClientRect()
+        if (rect.top <= 100) currentSection = i
+      }
+
+      readerStore.setCurrentLocation(paneIndex, {
+        displayMode: 'scroll',
+        sectionIndex: currentSection,
+        scrollRatio
+      })
     }
-
-    readerStore.setCurrentLocation(paneIndex, { sectionIndex: currentSection, scrollRatio })
   }
 
   function restorePosition(position) {
     if (!contentWrapper.value || !position) return
 
     setTimeout(() => {
-      if (position.scrollRatio !== undefined) {
-        const el = contentWrapper.value
-        const maxScroll = el.scrollHeight - el.clientHeight
-        el.scrollTop = position.scrollRatio * maxScroll
+      if (settingsStore.epubDisplayMode === 'page') {
+        // Page mode: restore from page or ratio
+        if (position.currentPage !== undefined && position.displayMode === 'page') {
+          goToPage(position.currentPage)
+        } else if (position.scrollRatio !== undefined) {
+          // Convert scroll ratio to page
+          const targetPage = Math.round(position.scrollRatio * (totalPages.value - 1))
+          goToPage(targetPage)
+        }
+      } else {
+        // Scroll mode: restore scroll position
+        if (position.scrollRatio !== undefined) {
+          const el = contentWrapper.value
+          const maxScroll = el.scrollHeight - el.clientHeight
+          el.scrollTop = position.scrollRatio * maxScroll
+        }
       }
     }, 100)
   }
 
-  function resize() {}
+  function resize() {
+    if (settingsStore.epubDisplayMode === 'page') {
+      // Recalculate pages on resize
+      calculateTotalPages()
+    }
+  }
 
   function handleScrollEvent() {
     if (!onScrollCallback) return
@@ -402,20 +614,81 @@ export function useEpubReader(paneIndex) {
 
   function getScrollInfo() {
     if (!contentWrapper.value) return null
-    const el = contentWrapper.value
-    return {
-      scrollTop: el.scrollTop,
-      scrollHeight: el.scrollHeight,
-      clientHeight: el.clientHeight,
-      scrollRatio: el.scrollTop / Math.max(1, el.scrollHeight - el.clientHeight),
+
+    if (settingsStore.epubDisplayMode === 'page') {
+      // Page mode: return page-based scroll info
+      const pageRatio = totalPages.value > 1
+        ? currentPage.value / (totalPages.value - 1)
+        : 0
+      return {
+        scrollTop: currentPage.value,
+        scrollHeight: totalPages.value,
+        clientHeight: 1,
+        scrollRatio: pageRatio,
+        displayMode: 'page',
+        currentPage: currentPage.value,
+        totalPages: totalPages.value,
+      }
+    } else {
+      // Scroll mode: return scroll-based info
+      const el = contentWrapper.value
+      return {
+        scrollTop: el.scrollTop,
+        scrollHeight: el.scrollHeight,
+        clientHeight: el.clientHeight,
+        scrollRatio: el.scrollTop / Math.max(1, el.scrollHeight - el.clientHeight),
+        displayMode: 'scroll',
+      }
     }
   }
 
   function setScrollByRatio(ratio) {
     if (!contentWrapper.value) return
-    const el = contentWrapper.value
-    const maxScroll = el.scrollHeight - el.clientHeight
-    el.scrollTop = ratio * maxScroll
+
+    if (settingsStore.epubDisplayMode === 'page') {
+      // Page mode: convert ratio to page
+      const targetPage = Math.round(ratio * (totalPages.value - 1))
+      if (targetPage !== currentPage.value) {
+        currentPage.value = targetPage
+        updatePagePosition()
+      }
+    } else {
+      // Scroll mode: set scroll position
+      const el = contentWrapper.value
+      const maxScroll = el.scrollHeight - el.clientHeight
+      el.scrollTop = ratio * maxScroll
+    }
+  }
+
+  // Watch for display mode changes and rebuild content
+  function setupDisplayModeWatcher() {
+    if (displayModeWatcher) {
+      displayModeWatcher() // Stop previous watcher
+    }
+
+    displayModeWatcher = watch(
+      () => settingsStore.epubDisplayMode,
+      async (newMode, oldMode) => {
+        if (!isReady.value || !book.value || newMode === oldMode) return
+
+        // Save current position ratio before switching
+        const scrollInfo = getScrollInfo()
+        const positionRatio = scrollInfo?.scrollRatio || 0
+
+        // Get the file to reopen
+        const currentBook = book.value
+
+        // Cleanup and rebuild
+        const savedFile = readerStore.files[paneIndex]
+        if (savedFile) {
+          // Store position for restore
+          readerStore.setCurrentLocation(paneIndex, { scrollRatio: positionRatio })
+
+          // Reopen the file with new display mode
+          await openFile(savedFile)
+        }
+      }
+    )
   }
 
   function cleanup() {
@@ -427,6 +700,11 @@ export function useEpubReader(paneIndex) {
     if (intersectionObserver) {
       intersectionObserver.disconnect()
       intersectionObserver = null
+    }
+
+    if (displayModeWatcher) {
+      displayModeWatcher()
+      displayModeWatcher = null
     }
 
     blobUrls.value.forEach(url => URL.revokeObjectURL(url))
@@ -444,8 +722,11 @@ export function useEpubReader(paneIndex) {
     }
 
     contentWrapper.value = null
+    columnWrapper.value = null
     book.value = null
     sections.value = []
+    currentPage.value = 0
+    totalPages.value = 1
     isReady.value = false
   }
 
@@ -455,8 +736,11 @@ export function useEpubReader(paneIndex) {
     containerRef,
     book,
     isReady,
+    currentPage,
+    totalPages,
     openFile,
     goTo,
+    goToPage,
     next,
     prev,
     scrollBy,
