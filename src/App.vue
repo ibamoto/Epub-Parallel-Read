@@ -7,7 +7,7 @@
     />
 
     <!-- Control Bar -->
-    <ControlBar @file-select="handleFileSelect" @history-select="handleHistorySelect" @open-settings="showSettings = true" />
+    <ControlBar @file-select="handleFileSelect" @history-select="handleHistorySelect" @open-settings="showSettings = true" @url-open="handleUrlOpen" />
 
     <!-- Reader Container -->
     <div class="reader-container">
@@ -16,7 +16,6 @@
         :paneIndex="0"
         position="left"
         :style="{ width: `${readerStore.leftPaneWidth}%` }"
-        @scroll="handleScroll(0)"
         @navigate="handleNavigate"
       />
 
@@ -30,7 +29,6 @@
         :paneIndex="1"
         position="right"
         :style="{ width: `${100 - readerStore.leftPaneWidth}%` }"
-        @scroll="handleScroll(1)"
         @navigate="handleNavigate"
       />
     </div>
@@ -52,7 +50,7 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
+import { ref, computed, onMounted, onUnmounted, watch, nextTick } from 'vue'
 import { useSettingsStore } from './stores/settings'
 import { useReaderStore } from './stores/reader'
 import { useFileHistory } from './composables/useFileHistory'
@@ -62,7 +60,7 @@ import SettingsPanel from './components/settings/SettingsPanel.vue'
 
 const settingsStore = useSettingsStore()
 const readerStore = useReaderStore()
-const { addToHistory } = useFileHistory()
+const { addToHistory, addUrlToHistory } = useFileHistory()
 
 const reader1 = ref(null)
 const reader2 = ref(null)
@@ -72,6 +70,7 @@ const showSettings = ref(false)
 let isSyncing = false
 let syncTimeout = null
 let keyboardNavLock = false  // Lock to prevent scroll sync during keyboard navigation
+let tocNavLock = false  // Lock to prevent scroll sync during TOC navigation
 
 // Theme class
 const themeClass = computed(() => ({
@@ -88,7 +87,13 @@ onMounted(() => {
   // Keyboard shortcuts
   window.addEventListener('keydown', handleKeyDown)
   window.addEventListener('resize', handleWindowResize)
+
+  // Setup wheel event listeners for scroll sync (after mount)
+  setupWheelSyncListeners()
 })
+
+// クロスオリジン制限により、iframe内からのメッセージ受信は不可能
+// 代わりに、.reader-view上のホイールイベントを使用してスクロール同期を実現
 
 onUnmounted(() => {
   window.removeEventListener('keydown', handleKeyDown)
@@ -96,6 +101,23 @@ onUnmounted(() => {
   if (syncTimeout) clearTimeout(syncTimeout)
   isSyncing = false
   keyboardNavLock = false
+  tocNavLock = false
+  
+  // Remove wheel listeners
+  if (wheelHandler0) {
+    const container1 = reader1.value?.$el?.querySelector?.('.epub-content-0, .reader-view')
+    if (container1) {
+      container1.removeEventListener('wheel', wheelHandler0)
+    }
+    wheelHandler0 = null
+  }
+  if (wheelHandler1) {
+    const container2 = reader2.value?.$el?.querySelector?.('.epub-content-1, .reader-view')
+    if (container2) {
+      container2.removeEventListener('wheel', wheelHandler1)
+    }
+    wheelHandler1 = null
+  }
 })
 
 // Handle file selection from control bar
@@ -120,44 +142,385 @@ async function handleHistorySelect(paneIndex, file) {
 
   try {
     const reader = paneIndex === 0 ? reader1.value : reader2.value
-    await reader?.openFile(file)
-    // Update history timestamp (with pane index)
-    await addToHistory(file, paneIndex)
+    
+    // Check if it's a URL
+    if (typeof file === 'object' && file.type === 'url' && file.url) {
+      await reader?.openUrl(file.url)
+      // Update history timestamp
+      await addUrlToHistory(file.url, paneIndex)
+    } else {
+      await reader?.openFile(file)
+      // Update history timestamp (with pane index)
+      await addToHistory(file, paneIndex)
+    }
   } catch (error) {
     console.error('Error opening file from history:', error)
     globalError.value = `ファイルを開けませんでした: ${error.message}`
   }
 }
 
-// Handle scroll sync (only for mouse/touch scroll, not keyboard navigation)
-function handleScroll(sourceIndex) {
-  // Skip sync if keyboard navigation is active, already syncing, or sync mode is off
-  if (!settingsStore.syncMode || isSyncing || keyboardNavLock) return
+// Handle URL open
+async function handleUrlOpen(paneIndex, url) {
+  try {
+    const reader = paneIndex === 0 ? reader1.value : reader2.value
+    if (reader?.openUrl) {
+      await reader.openUrl(url)
+      // Add URL to history after successful open
+      const { addUrlToHistory } = useFileHistory()
+      await addUrlToHistory(url, paneIndex)
+    } else {
+      // Fallback: create a file-like object for URL
+      const urlFile = new File([url], url, { type: 'text/plain' })
+      await reader?.openFile(urlFile)
+      await addToHistory(urlFile, paneIndex)
+    }
+  } catch (error) {
+    console.error('Error opening URL:', error)
+    globalError.value = `URLを開けませんでした: ${error.message}`
+  }
+}
 
-  isSyncing = true
+// Wheel event handlers (stored for cleanup)
+let wheelHandler0 = null
+let wheelHandler1 = null
+
+// Setup wheel event listeners for scroll sync
+function setupWheelSyncListeners() {
+  // Watch for file changes - ファイルが閉じられたときに自動的にOFFにする
+  watch([() => readerStore.fileTypes[0], () => readerStore.fileTypes[1]], (newValues, oldValues) => {
+    // 初回実行時は何もしない
+    if (!oldValues) return
+    
+    const hasFile1 = newValues[0] !== null
+    const hasFile2 = newValues[1] !== null
+    const hadFile1 = oldValues[0] !== null
+    const hadFile2 = oldValues[1] !== null
+    
+    // ファイルが閉じられたとき（両方のファイルが開いていた状態から、片方または両方が閉じられたとき）は自動的にOFFにする
+    if ((hadFile1 && hadFile2) && (!hasFile1 || !hasFile2) && settingsStore.syncMode) {
+      settingsStore.syncMode = false
+    }
+  }, { immediate: false })
+
+  // Watch for sync mode and file changes to setup wheel listeners
+  watch([() => readerStore.fileTypes[0], () => readerStore.fileTypes[1], () => settingsStore.syncMode], () => {
+    // Ensure refs are available
+    if (!reader1.value || !reader2.value) return
+
+    // Remove existing listeners
+    if (wheelHandler0) {
+      const container1 = reader1.value.$el?.querySelector?.('.epub-content-0, .reader-view')
+      if (container1) {
+        container1.removeEventListener('wheel', wheelHandler0)
+      }
+      wheelHandler0 = null
+    }
+    if (wheelHandler1) {
+      const container2 = reader2.value.$el?.querySelector?.('.epub-content-1, .reader-view')
+      if (container2) {
+        container2.removeEventListener('wheel', wheelHandler1)
+      }
+      wheelHandler1 = null
+    }
+
+    // Add new listeners if both files are open and sync mode is on
+    const hasFile1 = readerStore.fileTypes[0] !== null
+    const hasFile2 = readerStore.fileTypes[1] !== null
+    
+    if (hasFile1 && hasFile2 && settingsStore.syncMode) {
+      // Wait for DOM to update
+      nextTick(() => {
+        if (!reader1.value || !reader2.value) return
+
+        // EPUBの場合は.epub-content-{paneIndex}、PDF/Markdown/URLの場合は.reader-viewを探す
+        const container1 = reader1.value.$el?.querySelector?.('.epub-content-0') || 
+                          reader1.value.$el?.querySelector?.('.reader-view')
+        const container2 = reader2.value.$el?.querySelector?.('.epub-content-1') || 
+                          reader2.value.$el?.querySelector?.('.reader-view')
+        
+        if (container1) {
+          wheelHandler0 = (e) => handleWheelSync(e, 0)
+          container1.addEventListener('wheel', wheelHandler0, { passive: true })
+        }
+        if (container2) {
+          wheelHandler1 = (e) => handleWheelSync(e, 1)
+          container2.addEventListener('wheel', wheelHandler1, { passive: true })
+        }
+      })
+    }
+  }, { immediate: false })
+}
+
+/**
+ * ホイールイベントによるスクロール同期処理
+ * 
+ * EPUB、Markdown、PDFリーダーのスクロール同期を実装
+ * URLリーダーは別途実装（クロスオリジン制限により制約あり）
+ * 
+ * 仕様: READER_SPECIFICATIONS.md を参照
+ * 
+ * @param {WheelEvent} event - ホイールイベント
+ * @param {number} sourceIndex - ソースペインのインデックス (0 or 1)
+ */
+function handleWheelSync(event, sourceIndex) {
+  // Skip sync if keyboard navigation is active, TOC navigation is active, already syncing, or sync mode is off
+  if (!settingsStore.syncMode || isSyncing || keyboardNavLock || tocNavLock) return
+
+  // 両方のペインにファイルが開かれている場合のみ同期を実行
+  const hasFile1 = readerStore.books[0] !== null
+  const hasFile2 = readerStore.books[1] !== null
+  if (!hasFile1 || !hasFile2) return
 
   const source = sourceIndex === 0 ? reader1.value : reader2.value
   const target = sourceIndex === 0 ? reader2.value : reader1.value
 
-  const scrollInfo = source?.getScrollInfo?.()
-  if (scrollInfo && target?.setScrollByRatio) {
-    // setScrollByRatio is async, so we need a longer timeout
-    target.setScrollByRatio(scrollInfo.scrollRatio * settingsStore.syncSensitivity)
+  const sourceType = readerStore.fileTypes[sourceIndex]
+  const targetType = readerStore.fileTypes[1 - sourceIndex]
+
+  // EPUB、Markdown、PDFのスクロール同期処理
+  // URLリーダーは後続の処理で別途実装
+
+  // ============================================
+  // EPUB、Markdown、PDFのスクロール同期処理
+  // 
+  // 仕様: READER_SPECIFICATIONS.md を参照
+  // 
+  // 重要な制約:
+  // - ソースペインのスクロールは各リーダーのsetupWheelHandlerで実行される
+  // - ターゲットペインの同期はこの関数（handleWheelSync）で実行される
+  // - スクロール同期モードが有効な場合のみ実行される
+  // ============================================
+
+  // EPUB-EPUB: 両方のコンテナをスクロール
+  if (sourceType === 'epub' && targetType === 'epub') {
+    const targetContainer = target?.$el?.querySelector?.(`.epub-content-${1 - sourceIndex}`)
+    if (targetContainer) {
+      // 常に設定されたスクロール量を使用
+      const scrollAmount = settingsStore.scrollAmounts[1 - sourceIndex] || 100
+      const direction = event.deltaY > 0 ? 1 : -1
+      targetContainer.scrollBy({
+        top: direction * scrollAmount * settingsStore.syncSensitivity,
+        behavior: 'smooth'
+      })
+    }
+  }
+  // PDF-PDF: 両方のPDFでページ移動
+  else if (sourceType === 'pdf' && targetType === 'pdf') {
+    // 常に設定されたページ数を使用
+    const pageAmount = settingsStore.pdfPageAmounts[1 - sourceIndex] || 1
+    if (event.deltaY > 0) {
+      target?.pageBy?.(pageAmount)
+    } else if (event.deltaY < 0) {
+      target?.pageBy?.(-pageAmount)
+    }
+  }
+  // EPUB-PDF: EPUBをスクロール、PDFでページ移動
+  else if (sourceType === 'epub' && targetType === 'pdf') {
+    // 常に設定されたページ数を使用
+    const pageAmount = settingsStore.pdfPageAmounts[1 - sourceIndex] || 1
+    if (event.deltaY > 0) {
+      target?.pageBy?.(pageAmount)
+    } else if (event.deltaY < 0) {
+      target?.pageBy?.(-pageAmount)
+    }
+  }
+  // PDF-EPUB: PDFでページ移動、EPUBをスクロール
+  else if (sourceType === 'pdf' && targetType === 'epub') {
+    const targetContainer = target?.$el?.querySelector?.(`.epub-content-${1 - sourceIndex}`)
+    if (targetContainer) {
+      // 常に設定されたスクロール量を使用
+      const scrollAmount = settingsStore.scrollAmounts[1 - sourceIndex] || 100
+      const direction = event.deltaY > 0 ? 1 : -1
+      targetContainer.scrollBy({
+        top: direction * scrollAmount * settingsStore.syncSensitivity,
+        behavior: 'smooth'
+      })
+    }
+  }
+  // Markdown-Markdown: 両方のコンテナをスクロール
+  else if (sourceType === 'markdown' && targetType === 'markdown') {
+    const targetContainer = target?.$el?.querySelector?.('.reader-view')
+    if (targetContainer) {
+      const scrollAmount = settingsStore.scrollAmounts[1 - sourceIndex] || 100
+      const direction = event.deltaY > 0 ? 1 : -1
+      targetContainer.scrollBy({
+        top: direction * scrollAmount * settingsStore.syncSensitivity,
+        behavior: 'smooth'
+      })
+    }
+  }
+  // Markdown-EPUB: Markdownをスクロール、EPUBをスクロール
+  else if (sourceType === 'markdown' && targetType === 'epub') {
+    const targetContainer = target?.$el?.querySelector?.(`.epub-content-${1 - sourceIndex}`)
+    if (targetContainer) {
+      const scrollAmount = settingsStore.scrollAmounts[1 - sourceIndex] || 100
+      const direction = event.deltaY > 0 ? 1 : -1
+      targetContainer.scrollBy({
+        top: direction * scrollAmount * settingsStore.syncSensitivity,
+        behavior: 'smooth'
+      })
+    }
+  }
+  // EPUB-Markdown: EPUBをスクロール、Markdownをスクロール
+  else if (sourceType === 'epub' && targetType === 'markdown') {
+    const targetContainer = target?.$el?.querySelector?.('.reader-view')
+    if (targetContainer) {
+      const scrollAmount = settingsStore.scrollAmounts[1 - sourceIndex] || 100
+      const direction = event.deltaY > 0 ? 1 : -1
+      targetContainer.scrollBy({
+        top: direction * scrollAmount * settingsStore.syncSensitivity,
+        behavior: 'smooth'
+      })
+    }
+  }
+  // Markdown-PDF: Markdownをスクロール、PDFでページ移動
+  else if (sourceType === 'markdown' && targetType === 'pdf') {
+    const pageAmount = settingsStore.pdfPageAmounts[1 - sourceIndex] || 1
+    if (event.deltaY > 0) {
+      target?.pageBy?.(pageAmount)
+    } else if (event.deltaY < 0) {
+      target?.pageBy?.(-pageAmount)
+    }
+  }
+  // PDF-Markdown: PDFでページ移動、Markdownをスクロール
+  else if (sourceType === 'pdf' && targetType === 'markdown') {
+    const targetContainer = target?.$el?.querySelector?.('.reader-view')
+    if (targetContainer) {
+      const scrollAmount = settingsStore.scrollAmounts[1 - sourceIndex] || 100
+      const direction = event.deltaY > 0 ? 1 : -1
+      targetContainer.scrollBy({
+        top: direction * scrollAmount * settingsStore.syncSensitivity,
+        behavior: 'smooth'
+      })
+    }
+  }
+  // URL-URL: 両方のiframeをスクロール（.reader-viewのホイールイベントからscrollByを呼び出す）
+  else if (sourceType === 'url' && targetType === 'url') {
+    // ソースペインのスクロール
+    const sourceScrollAmount = settingsStore.scrollAmounts[sourceIndex] || 100
+    const sourceDirection = event.deltaY > 0 ? 1 : -1
+    source?.scrollBy?.(sourceDirection * sourceScrollAmount)
+    
+    // ターゲットペインのスクロール
+    const targetScrollAmount = settingsStore.scrollAmounts[1 - sourceIndex] || 100
+    const targetDirection = event.deltaY > 0 ? 1 : -1
+    target?.scrollBy?.(targetDirection * targetScrollAmount * settingsStore.syncSensitivity)
+  }
+  // URL-EPUB: URLをスクロール、EPUBをスクロール
+  else if (sourceType === 'url' && targetType === 'epub') {
+    // ソースペイン（URL）のスクロール
+    const sourceScrollAmount = settingsStore.scrollAmounts[sourceIndex] || 100
+    const sourceDirection = event.deltaY > 0 ? 1 : -1
+    source?.scrollBy?.(sourceDirection * sourceScrollAmount)
+    
+    // ターゲットペイン（EPUB）のスクロール
+    const targetContainer = target?.$el?.querySelector?.(`.epub-content-${1 - sourceIndex}`)
+    if (targetContainer) {
+      const scrollAmount = settingsStore.scrollAmounts[1 - sourceIndex] || 100
+      const direction = event.deltaY > 0 ? 1 : -1
+      targetContainer.scrollBy({
+        top: direction * scrollAmount * settingsStore.syncSensitivity,
+        behavior: 'smooth'
+      })
+    }
+  }
+  // EPUB-URL: EPUBをスクロール、URLをスクロール
+  else if (sourceType === 'epub' && targetType === 'url') {
+    // ターゲットペイン（URL）のスクロール
+    const scrollAmount = settingsStore.scrollAmounts[1 - sourceIndex] || 100
+    const direction = event.deltaY > 0 ? 1 : -1
+    target?.scrollBy?.(direction * scrollAmount * settingsStore.syncSensitivity)
+  }
+  // URL-Markdown: URLをスクロール、Markdownをスクロール
+  else if (sourceType === 'url' && targetType === 'markdown') {
+    // ソースペイン（URL）のスクロール
+    const sourceScrollAmount = settingsStore.scrollAmounts[sourceIndex] || 100
+    const sourceDirection = event.deltaY > 0 ? 1 : -1
+    source?.scrollBy?.(sourceDirection * sourceScrollAmount)
+    
+    // ターゲットペイン（Markdown）のスクロール
+    const targetContainer = target?.$el?.querySelector?.('.reader-view')
+    if (targetContainer) {
+      const scrollAmount = settingsStore.scrollAmounts[1 - sourceIndex] || 100
+      const direction = event.deltaY > 0 ? 1 : -1
+      targetContainer.scrollBy({
+        top: direction * scrollAmount * settingsStore.syncSensitivity,
+        behavior: 'smooth'
+      })
+    }
+  }
+  // Markdown-URL: Markdownをスクロール、URLをスクロール
+  else if (sourceType === 'markdown' && targetType === 'url') {
+    // ターゲットペイン（URL）のスクロール
+    const scrollAmount = settingsStore.scrollAmounts[1 - sourceIndex] || 100
+    const direction = event.deltaY > 0 ? 1 : -1
+    target?.scrollBy?.(direction * scrollAmount * settingsStore.syncSensitivity)
+  }
+  // URL-PDF: URLをスクロール、PDFでページ移動
+  else if (sourceType === 'url' && targetType === 'pdf') {
+    // ソースペイン（URL）のスクロール
+    const sourceScrollAmount = settingsStore.scrollAmounts[sourceIndex] || 100
+    const sourceDirection = event.deltaY > 0 ? 1 : -1
+    source?.scrollBy?.(sourceDirection * sourceScrollAmount)
+    
+    // ターゲットペイン（PDF）のページ移動
+    const pageAmount = settingsStore.pdfPageAmounts[1 - sourceIndex] || 1
+    if (event.deltaY > 0) {
+      target?.pageBy?.(pageAmount)
+    } else if (event.deltaY < 0) {
+      target?.pageBy?.(-pageAmount)
+    }
+  }
+  // PDF-URL: PDFでページ移動、URLをスクロール
+  else if (sourceType === 'pdf' && targetType === 'url') {
+    // ターゲットペイン（URL）のスクロール
+    const scrollAmount = settingsStore.scrollAmounts[1 - sourceIndex] || 100
+    const direction = event.deltaY > 0 ? 1 : -1
+    target?.scrollBy?.(direction * scrollAmount * settingsStore.syncSensitivity)
   }
 
-  // Clear any existing timeout
-  if (syncTimeout) clearTimeout(syncTimeout)
-
-  // Use longer timeout to cover async section loading
-  syncTimeout = setTimeout(() => {
-    isSyncing = false
-  }, 300)
+  // ============================================
+  // URLリーダーのスクロール同期処理
+  // 
+  // 注意: URLリーダーは仕様が異なるため、EPUB/Markdown/PDFとは別実装
+  // - クロスオリジン制限により、iframe内のスクロールイベントは検出できない
+  // - .reader-view上のホイールイベントのみ検出可能
+  // - iframe内のスクロールを制御するには、webSecurity: falseが必要
+  // 
+  // 仕様: READER_SPECIFICATIONS.md を参照（URLリーダーは別途実装中）
+  // ============================================
 }
 
-// Handle navigation sync (from button clicks)
-function handleNavigate(sourceIndex, direction) {
+/**
+ * ナビゲーションボタンによる同期処理
+ * 
+ * EPUB、Markdown、PDFリーダーのナビゲーション同期を実装
+ * URLリーダーも対象（next/prevでスクロールを実行）
+ * 
+ * 仕様: READER_SPECIFICATIONS.md を参照
+ * 
+ * @param {number} sourceIndex - ソースペインのインデックス (0 or 1)
+ * @param {string} direction - ナビゲーション方向 ('next' | 'prev' | 'toc')
+ * @param {string} href - ナビゲーション先のhref（目次ナビゲーション時）
+ */
+function handleNavigate(sourceIndex, direction, href) {
+  // 目次からのナビゲーションの場合は、スクロール同期を無効化
+  if (direction === 'toc') {
+    tocNavLock = true
+    // 目次ナビゲーション完了後にロックを解除（スクロールアニメーションを考慮）
+    setTimeout(() => {
+      tocNavLock = false
+    }, 1000) // TOC navigation may take longer due to section loading
+    return // 目次ナビゲーションは同期しない
+  }
+
   // Skip if sync mode is off or keyboard nav is active
   if (!settingsStore.syncMode || keyboardNavLock) return
+
+  // 両方のペインにファイルが開かれている場合のみ同期を実行
+  const hasFile1 = readerStore.fileTypes[0] !== null
+  const hasFile2 = readerStore.fileTypes[1] !== null
+  if (!hasFile1 || !hasFile2) return
 
   // Lock to prevent scroll sync feedback
   keyboardNavLock = true
@@ -242,38 +605,51 @@ function handleKeyDown(event) {
     keyboardNavLock = false
   }, 800) // Extended timeout to cover smooth scroll animations
 
+  // 両方のペインにファイルが開かれているかチェック
+  const hasFile1 = readerStore.fileTypes[0] !== null
+  const hasFile2 = readerStore.fileTypes[1] !== null
+  const bothFilesOpen = hasFile1 && hasFile2
+
   // Left/Right arrows: page navigation for both EPUB and PDF
   if (event.key === 'ArrowLeft') {
     event.preventDefault()
     reader1.value?.prev?.()
-    if (settingsStore.syncMode) reader2.value?.prev?.()
+    if (settingsStore.syncMode && bothFilesOpen) reader2.value?.prev?.()
   } else if (event.key === 'ArrowRight') {
     event.preventDefault()
     reader1.value?.next?.()
-    if (settingsStore.syncMode) reader2.value?.next?.()
+    if (settingsStore.syncMode && bothFilesOpen) reader2.value?.next?.()
   }
-  // Up/Down arrows: scroll for EPUB, page navigation for PDF
+  // Up/Down arrows: scroll for EPUB/Markdown/URL, page navigation for PDF
   else if (event.key === 'ArrowUp' || event.key === 'ArrowDown') {
     event.preventDefault()
-    const scrollAmount1 = settingsStore.scrollAmounts[0] // EPUB scroll pixels
+    const scrollAmount1 = settingsStore.scrollAmounts[0] // EPUB/Markdown/URL scroll pixels
     const scrollAmount2 = settingsStore.scrollAmounts[1]
     const pageAmount1 = settingsStore.pdfPageAmounts[0] // PDF pages
     const pageAmount2 = settingsStore.pdfPageAmounts[1]
 
     if (event.key === 'ArrowUp') {
-      // EPUB: scroll up, PDF: previous pages
-      if (fileType1 === 'epub') reader1.value?.scrollBy?.(-scrollAmount1)
+      // EPUB/Markdown/URL: scroll up, PDF: previous pages
+      if (fileType1 === 'epub' || fileType1 === 'markdown' || fileType1 === 'url') {
+        reader1.value?.scrollBy?.(-scrollAmount1)
+      }
       if (fileType1 === 'pdf') reader1.value?.pageBy?.(-pageAmount1)
-      if (settingsStore.syncMode) {
-        if (fileType2 === 'epub') reader2.value?.scrollBy?.(-scrollAmount2)
+      if (settingsStore.syncMode && bothFilesOpen) {
+        if (fileType2 === 'epub' || fileType2 === 'markdown' || fileType2 === 'url') {
+          reader2.value?.scrollBy?.(-scrollAmount2)
+        }
         if (fileType2 === 'pdf') reader2.value?.pageBy?.(-pageAmount2)
       }
     } else {
-      // EPUB: scroll down, PDF: next pages
-      if (fileType1 === 'epub') reader1.value?.scrollBy?.(scrollAmount1)
+      // EPUB/Markdown/URL: scroll down, PDF: next pages
+      if (fileType1 === 'epub' || fileType1 === 'markdown' || fileType1 === 'url') {
+        reader1.value?.scrollBy?.(scrollAmount1)
+      }
       if (fileType1 === 'pdf') reader1.value?.pageBy?.(pageAmount1)
-      if (settingsStore.syncMode) {
-        if (fileType2 === 'epub') reader2.value?.scrollBy?.(scrollAmount2)
+      if (settingsStore.syncMode && bothFilesOpen) {
+        if (fileType2 === 'epub' || fileType2 === 'markdown' || fileType2 === 'url') {
+          reader2.value?.scrollBy?.(scrollAmount2)
+        }
         if (fileType2 === 'pdf') reader2.value?.pageBy?.(pageAmount2)
       }
     }

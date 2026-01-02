@@ -8,6 +8,7 @@ const defaultPaneSettings = () => ({
   fontFamily: 'system-ui',
   fontSize: 16,
   fontWeight: 400,
+  textColor: null, // null means use theme color
 
   // Layout settings
   lineHeight: 1.6,
@@ -31,14 +32,15 @@ export const useSettingsStore = defineStore('settings', () => {
   const showControls = ref(true)
   const syncSensitivity = ref(1.0)
 
-  // EPUB display mode per pane: 'scroll' | 'page'
-  const epubDisplayModes = ref(['scroll', 'scroll'])
 
   // Per-pane scroll amount (in pixels for EPUB)
   const scrollAmounts = ref([100, 100])
 
   // Per-pane PDF page amount (pages per navigation)
   const pdfPageAmounts = ref([1, 1])
+
+  // Per-pane URL font size (percentage, default 100%)
+  const urlFontSizes = ref([100, 100])
 
   // Use scroll/page amount for wheel navigation
   const useWheelAmount = ref(false)
@@ -79,10 +81,10 @@ export const useSettingsStore = defineStore('settings', () => {
         syncMode.value = parsed.syncMode ?? false
         showControls.value = parsed.showControls ?? true
         syncSensitivity.value = parsed.syncSensitivity ?? 1.0
-        epubDisplayModes.value = parsed.epubDisplayModes ?? ['scroll', 'scroll']
         theme.value = parsed.theme ?? 'light'
         scrollAmounts.value = parsed.scrollAmounts ?? [100, 100]
         pdfPageAmounts.value = parsed.pdfPageAmounts ?? [1, 1]
+        urlFontSizes.value = parsed.urlFontSizes ?? [100, 100]
         useWheelAmount.value = parsed.useWheelAmount ?? false
         showProgressBar.value = parsed.showProgressBar ?? [true, true]
 
@@ -110,12 +112,12 @@ export const useSettingsStore = defineStore('settings', () => {
         syncMode: syncMode.value,
         showControls: showControls.value,
         syncSensitivity: syncSensitivity.value,
-        epubDisplayModes: epubDisplayModes.value,
         theme: theme.value,
         customColors: customColors.value,
         paneSettings: paneSettings.value,
         scrollAmounts: scrollAmounts.value,
         pdfPageAmounts: pdfPageAmounts.value,
+        urlFontSizes: urlFontSizes.value,
         useWheelAmount: useWheelAmount.value,
         showProgressBar: showProgressBar.value,
       }
@@ -159,14 +161,26 @@ export const useSettingsStore = defineStore('settings', () => {
 
   // Update scroll amount for a pane
   function setScrollAmount(paneIndex, value) {
-    scrollAmounts.value = [...scrollAmounts.value]
-    scrollAmounts.value[paneIndex] = value
+    const newAmounts = [...scrollAmounts.value]
+    newAmounts[paneIndex] = value
+    scrollAmounts.value = newAmounts
+    saveSettings()
   }
 
   // Update PDF page amount for a pane
   function setPdfPageAmount(paneIndex, value) {
-    pdfPageAmounts.value = [...pdfPageAmounts.value]
-    pdfPageAmounts.value[paneIndex] = value
+    const newAmounts = [...pdfPageAmounts.value]
+    newAmounts[paneIndex] = value
+    pdfPageAmounts.value = newAmounts
+    saveSettings()
+  }
+
+  // Update URL font size for a pane
+  function setUrlFontSize(paneIndex, value) {
+    const newSizes = [...urlFontSizes.value]
+    newSizes[paneIndex] = value
+    urlFontSizes.value = newSizes
+    saveSettings()
   }
 
   // Toggle progress bar for a pane
@@ -182,12 +196,6 @@ export const useSettingsStore = defineStore('settings', () => {
     saveSettings()
   }
 
-  // Set EPUB display mode for a specific pane
-  function setEpubDisplayMode(paneIndex, mode) {
-    epubDisplayModes.value = [...epubDisplayModes.value]
-    epubDisplayModes.value[paneIndex] = mode
-    saveSettings()
-  }
 
   // Get theme colors
   function getThemeColors() {
@@ -216,7 +224,7 @@ export const useSettingsStore = defineStore('settings', () => {
   }
 
   // Auto-save on changes
-  watch([isDarkMode, syncMode, showControls, syncSensitivity, epubDisplayModes, theme, customColors, paneSettings, scrollAmounts, pdfPageAmounts, useWheelAmount, showProgressBar], () => {
+  watch([isDarkMode, syncMode, showControls, syncSensitivity, theme, customColors, paneSettings, scrollAmounts, pdfPageAmounts, urlFontSizes, useWheelAmount, showProgressBar], () => {
     saveSettings()
   }, { deep: true })
 
@@ -226,13 +234,13 @@ export const useSettingsStore = defineStore('settings', () => {
     syncMode,
     showControls,
     syncSensitivity,
-    epubDisplayModes,
     theme,
     customColors,
     paneSettings,
     fontOptions,
     scrollAmounts,
     pdfPageAmounts,
+    urlFontSizes,
     useWheelAmount,
     showProgressBar,
 
@@ -246,9 +254,9 @@ export const useSettingsStore = defineStore('settings', () => {
     resetPaneSettings,
     setScrollAmount,
     setPdfPageAmount,
+    setUrlFontSize,
     setShowProgressBar,
     setTheme,
-    setEpubDisplayMode,
     getThemeColors,
   }
 })

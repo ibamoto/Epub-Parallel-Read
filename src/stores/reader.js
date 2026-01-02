@@ -7,7 +7,7 @@ export const useReaderStore = defineStore('reader', () => {
   // Reader state for each pane
   const books = ref([null, null])
   const renditions = ref([null, null])
-  const fileTypes = ref([null, null]) // 'epub' | 'pdf' | null
+  const fileTypes = ref([null, null]) // 'epub' | 'pdf' | 'markdown' | 'url' | null
   const fileNames = ref(['', ''])
   const files = ref([null, null]) // Store File objects (not persisted)
   const tocs = ref([[], []])

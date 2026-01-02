@@ -35,6 +35,26 @@ contextBridge.exposeInMainWorld('myFS', {
   },
 })
 
+// Expose IPC methods for iframe control via extension
+const { ipcRenderer } = require('electron')
+contextBridge.exposeInMainWorld('electronAPI', {
+  applyIframeFontSize: (iframeId, fontSize) => {
+    return ipcRenderer.invoke('apply-iframe-font-size', iframeId, fontSize)
+  },
+  preventIframeHorizontalScroll: (iframeId) => {
+    return ipcRenderer.invoke('prevent-iframe-horizontal-scroll', iframeId)
+  },
+  getIframeScrollInfo: (iframeId) => {
+    return ipcRenderer.invoke('get-iframe-scroll-info', iframeId)
+  },
+  scrollIframe: (iframeId, distance) => {
+    return ipcRenderer.invoke('scroll-iframe', iframeId, distance)
+  },
+  setIframeScrollRatio: (iframeId, ratio) => {
+    return ipcRenderer.invoke('set-iframe-scroll-ratio', iframeId, ratio)
+  },
+})
+
 // Prevent drag-and-drop from navigating
 window.addEventListener('DOMContentLoaded', () => {
   const preventDrag = (e) => {

@@ -127,6 +127,53 @@ async function addToHistory(file, paneIndex) {
   })
 }
 
+// Add URL to history for a specific pane
+async function addUrlToHistory(url, paneIndex) {
+  const db = await openDB()
+
+  return new Promise((resolve, reject) => {
+    const transaction = db.transaction(STORE_NAME, 'readwrite')
+    const store = transaction.objectStore(STORE_NAME)
+
+    // Check if URL with same name exists in this pane
+    const index = store.index('paneAndFile')
+    const checkRequest = index.getAll([paneIndex, url])
+
+    checkRequest.onsuccess = () => {
+      const existing = checkRequest.result
+
+      // Delete existing entries with same URL in this pane
+      existing.forEach(item => {
+        store.delete(item.id)
+      })
+
+      // Add new entry
+      const entry = {
+        fileName: url,
+        fileType: 'url',
+        fileSize: 0,
+        fileData: null, // URL doesn't need file data
+        urlData: url, // Store URL string separately
+        openedAt: Date.now(),
+        paneIndex: paneIndex,
+      }
+
+      const addRequest = store.add(entry)
+      addRequest.onerror = () => reject(addRequest.error)
+      addRequest.onsuccess = () => {
+        // Cleanup old entries if exceeding max for this pane
+        cleanupOldEntriesForPane(paneIndex).then(() => {
+          loadAllHistory().then(() => {
+            resolve(addRequest.result)
+          })
+        })
+      }
+    }
+
+    checkRequest.onerror = () => reject(checkRequest.error)
+  })
+}
+
 // Get file data by ID
 async function getFileById(id) {
   const db = await openDB()
@@ -139,10 +186,15 @@ async function getFileById(id) {
     request.onsuccess = () => {
       const item = request.result
       if (item) {
-        // Create a File object from stored data
-        const blob = new Blob([item.fileData], { type: getFileMimeType(item.fileType) })
-        const file = new File([blob], item.fileName, { type: blob.type })
-        resolve(file)
+        // If it's a URL, return the URL string directly
+        if (item.fileType === 'url' && item.urlData) {
+          resolve({ type: 'url', url: item.urlData, fileName: item.fileName })
+        } else {
+          // Create a File object from stored data
+          const blob = new Blob([item.fileData], { type: getFileMimeType(item.fileType) })
+          const file = new File([blob], item.fileName, { type: blob.type })
+          resolve(file)
+        }
       } else {
         resolve(null)
       }
@@ -205,6 +257,11 @@ function getFileMimeType(ext) {
       return 'application/epub+zip'
     case 'pdf':
       return 'application/pdf'
+    case 'md':
+    case 'markdown':
+      return 'text/markdown'
+    case 'url':
+      return 'text/plain'
     default:
       return 'application/octet-stream'
   }
@@ -259,6 +316,7 @@ export function useFileHistory() {
     isInitialized,
     init,
     addToHistory,
+    addUrlToHistory,
     getFileById,
     deleteFromHistory,
     formatFileSize,

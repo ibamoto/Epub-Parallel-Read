@@ -73,6 +73,8 @@ npm run electron:build
 - **ビルドツール**: Vite + electron-builder
 
 > 詳細なアーキテクチャについては [docs/ARCHITECTURE.md](./docs/ARCHITECTURE.md) を参照してください。
+> 
+> EPUB、Markdown、PDFリーダーの仕様については [docs/READER_SPECIFICATIONS.md](./docs/READER_SPECIFICATIONS.md) を参照してください。
 
 ## プロジェクト構成
 

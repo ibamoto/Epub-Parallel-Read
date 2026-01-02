@@ -287,7 +287,15 @@ export function usePdfReader(paneIndex) {
   // Wheel event handler reference for cleanup
   let wheelHandler = null
 
-  // Setup wheel event handler for page navigation
+  /**
+   * PDFリーダーのホイールイベントハンドラーを設定
+   * 
+   * 仕様: READER_SPECIFICATIONS.md を参照
+   * - ソースペインのページ移動を実行（スクロール同期モードでも実行される）
+   * - ターゲットペインの同期はApp.vueのhandleWheelSyncで処理される
+   * - デバウンス: 250ms
+   * - ページ移動量: pdfPageAmounts[paneIndex]
+   */
   function setupWheelHandler() {
     if (!containerRef.value) return
 
@@ -297,18 +305,21 @@ export function usePdfReader(paneIndex) {
     }
 
     wheelHandler = (e) => {
-      e.preventDefault()
+      // スクロール同期モードの時は、App.vueのhandleWheelSyncがターゲットペインを同期するので、preventDefault()を呼ばない
+      // ただし、スクロール同期モードでない場合は、通常通りpreventDefault()を呼ぶ
+      if (!settingsStore.syncMode) {
+        e.preventDefault()
+      }
 
-      // Debounce to prevent too rapid page changes
+      // Debounce: 250ms (ページ移動は重い処理のため、EPUBより長め)
       if (wheelHandler.lastTime && Date.now() - wheelHandler.lastTime < 250) {
         return
       }
       wheelHandler.lastTime = Date.now()
 
-      // Get page amount from settings if useWheelAmount is enabled
-      const pageAmount = settingsStore.useWheelAmount
-        ? settingsStore.pdfPageAmounts[paneIndex]
-        : 1
+      // スクロール同期モードの時でも、ソースペインのページ移動は実行する
+      // 常に設定されたページ数を使用
+      const pageAmount = settingsStore.pdfPageAmounts[paneIndex] || 1
 
       if (e.deltaY > 0) {
         goToPage(currentPage.value + pageAmount)
@@ -320,7 +331,15 @@ export function usePdfReader(paneIndex) {
     containerRef.value.addEventListener('wheel', wheelHandler, { passive: false })
   }
 
-  // Get scroll info for sync - for PDF, calculate ratio from page number
+  /**
+   * スクロール情報を取得（スクロール同期用）
+   * 
+   * 仕様: READER_SPECIFICATIONS.md を参照
+   * - PDFはページ番号からスクロール比率を計算
+   * - 実際のスクロール位置は使用しない
+   * 
+   * @returns {ScrollInfo | null} スクロール情報
+   */
   function getScrollInfo() {
     if (!totalPages.value) return null
     // Convert current page to scroll ratio
@@ -333,8 +352,15 @@ export function usePdfReader(paneIndex) {
     }
   }
 
-  // Set scroll position by ratio - disabled for PDF
-  // PDF navigation should be independent, using next/prev buttons for sync
+  /**
+   * スクロール位置を比率で設定（スクロール同期用）
+   * 
+   * 仕様: READER_SPECIFICATIONS.md を参照
+   * - PDFは比率によるスクロール同期をサポートしない
+   * - ナビゲーションボタン（next/prev）による同期のみサポート
+   * 
+   * @param {number} ratio - スクロール比率 (0.0 - 1.0) - 使用されない
+   */
   function setScrollByRatio(ratio) {
     // Do nothing - PDF doesn't sync by scroll ratio
     // Sync is handled by explicit navigation (next/prev buttons)

@@ -1,8 +1,9 @@
 <template>
-  <div class="reader-pane-container">
-    <div class="reader-wrapper" :class="position">
-      <!-- TOC Sidebar -->
+  <div class="reader-pane-container" :class="{ 'url-mode': isUrlMode }">
+    <div class="reader-wrapper" :class="[position, { 'url-mode': isUrlMode }]">
+      <!-- TOC Sidebar (hidden in URL mode) -->
       <TableOfContents
+        v-if="!isUrlMode"
         :items="readerStore.tocs[paneIndex]"
         :visible="readerStore.showToc[paneIndex]"
         :position="position"
@@ -14,7 +15,8 @@
       <!-- Reader Content -->
       <div
         class="reader-content"
-        :class="{ dragover: isDragging }"
+        :class="{ dragover: isDragging, 'url-mode': isUrlMode }"
+        :style="isUrlMode ? { overflow: 'auto' } : null"
         @dragenter.prevent="isDragging = true"
         @dragleave.prevent="isDragging = false"
         @dragover.prevent
@@ -31,7 +33,7 @@
           <div class="drop-icon">📚</div>
           <p>ファイルをドラッグ＆ドロップ</p>
           <p class="hint">または上のボタンから選択</p>
-          <p class="formats">対応形式: EPUB, PDF</p>
+          <p class="formats">対応形式: EPUB, PDF, Markdown, URL</p>
         </div>
 
         <!-- Reader View -->
@@ -39,12 +41,21 @@
           v-show="hasContent && !readerStore.isLoading[paneIndex]"
           ref="readerView"
           class="reader-view"
+          :class="{ 'url-mode': isUrlMode }"
+          :style="isUrlMode ? { overflow: 'auto' } : null"
         ></div>
 
         <!-- Progress Bar (clickable for navigation) -->
         <div v-if="showProgress" class="progress-bar-container">
-          <div class="progress-bar" @click="handleProgressClick" ref="progressBar">
-            <div class="progress-fill" :style="{ width: progressPercent + '%' }"></div>
+          <div
+            class="progress-bar"
+            @click="handleProgressClick"
+            ref="progressBar"
+          >
+            <div
+              class="progress-fill"
+              :style="{ width: progressPercent + '%' }"
+            ></div>
           </div>
           <span class="progress-text">{{ Math.round(progressPercent) }}%</span>
         </div>
@@ -57,27 +68,47 @@
     </div>
 
     <!-- Navigation Buttons -->
-    <div class="navigation-group" :class="position">
-      <button @click="handlePrev">← 前へ</button>
-      <button @click="handleNext">次へ →</button>
+    <div
+      class="navigation-group"
+      :class="[position, { 'url-mode': isUrlMode }]"
+    >
+      <button @click.stop="handlePrev" type="button">
+        <span v-if="isUrlMode">↑ 上</span>
+        <span v-else>← 前へ</span>
+      </button>
+      <button @click.stop="handleNext" type="button">
+        <span v-if="isUrlMode">↓ 下</span>
+        <span v-else>次へ →</span>
+      </button>
 
-      <!-- EPUB Display Mode Toggle -->
-      <div v-if="isEpub" class="display-mode-toggle">
+      <!-- Font size controls (URL mode only) -->
+      <div v-if="isUrlMode" class="font-size-controls">
         <button
-          :class="{ active: currentDisplayMode === 'scroll' }"
-          @click="setDisplayMode('scroll')"
-          title="スクロールモード"
+          @click="decreaseFontSize"
+          class="font-size-btn"
+          title="文字サイズを小さく"
         >
-          スクロール
+          −
         </button>
+        <span class="font-size-display">{{ urlFontSize }}%</span>
         <button
-          :class="{ active: currentDisplayMode === 'page' }"
-          @click="setDisplayMode('page')"
-          title="ページモード"
+          @click="increaseFontSize"
+          class="font-size-btn"
+          title="文字サイズを大きく"
         >
-          ページ
+          ＋
         </button>
       </div>
+
+      <button
+        v-if="hasContent"
+        class="progress-toggle"
+        :class="{ active: settingsStore.showProgressBar[paneIndex] }"
+        @click="toggleProgressBar"
+        :title="`${position === 'left' ? '左' : '右'}ペインのプログレスバー`"
+      >
+        <span>━</span>
+      </button>
 
       <span v-if="fileInfo" class="file-info">{{ fileInfo }}</span>
     </div>
@@ -85,11 +116,13 @@
 </template>
 
 <script setup>
-import { ref, computed, watch, onMounted, onUnmounted } from "vue";
+import { ref, computed, watch, onMounted, onUnmounted, nextTick } from "vue";
 import { useReaderStore } from "../../stores/reader";
 import { useSettingsStore } from "../../stores/settings";
 import { useEpubReader } from "../../composables/useEpubReader";
 import { usePdfReader } from "../../composables/usePdfReader";
+import { useMarkdownReader } from "../../composables/useMarkdownReader";
+import { useWebReader } from "../../composables/useWebReader";
 import TableOfContents from "../navigation/TableOfContents.vue";
 
 const props = defineProps({
@@ -103,7 +136,7 @@ const props = defineProps({
   },
 });
 
-const emit = defineEmits(["scroll", "navigate"]);
+const emit = defineEmits(["navigate"]);
 
 const readerStore = useReaderStore();
 const settingsStore = useSettingsStore();
@@ -113,16 +146,25 @@ const progressBar = ref(null);
 const isDragging = ref(false);
 const scrollProgress = ref(0);
 
-// Handle scroll - emit to parent for sync and update progress
+// Handle scroll - update progress only (scroll sync is handled by wheel events)
 function handleScroll() {
-  emit("scroll", props.paneIndex);
   updateScrollProgress();
 }
 
-// Update scroll progress for EPUB
+// Update scroll progress for EPUB, Markdown, and URL
 function updateScrollProgress() {
-  const scrollInfo = epubReader.getScrollInfo?.();
-  if (scrollInfo && typeof scrollInfo.scrollRatio === 'number') {
+  const fileType = readerStore.fileTypes[props.paneIndex];
+  let scrollInfo = null;
+
+  if (fileType === "epub") {
+    scrollInfo = epubReader.getScrollInfo?.();
+  } else if (fileType === "markdown") {
+    scrollInfo = markdownReader.getScrollInfo?.();
+  } else if (fileType === "url") {
+    scrollInfo = webReader.getScrollInfo?.();
+  }
+
+  if (scrollInfo && typeof scrollInfo.scrollRatio === "number") {
     scrollProgress.value = scrollInfo.scrollRatio;
   }
 }
@@ -130,12 +172,16 @@ function updateScrollProgress() {
 // Initialize readers with scroll callback
 const epubReader = useEpubReader(props.paneIndex, handleScroll);
 const pdfReader = usePdfReader(props.paneIndex);
+const markdownReader = useMarkdownReader(props.paneIndex);
+const webReader = useWebReader(props.paneIndex);
 
 // Current active reader
 const activeReader = computed(() => {
   const fileType = readerStore.fileTypes[props.paneIndex];
   if (fileType === "epub") return epubReader;
   if (fileType === "pdf") return pdfReader;
+  if (fileType === "markdown") return markdownReader;
+  if (fileType === "url") return webReader;
   return null;
 });
 
@@ -144,16 +190,16 @@ const hasContent = computed(() => {
 });
 
 const isEpub = computed(() => {
-  return readerStore.fileTypes[props.paneIndex] === 'epub';
+  return readerStore.fileTypes[props.paneIndex] === "epub";
 });
 
-const currentDisplayMode = computed(() => {
-  return settingsStore.epubDisplayModes[props.paneIndex];
+const isUrlMode = computed(() => {
+  return readerStore.fileTypes[props.paneIndex] === "url";
 });
 
-function setDisplayMode(mode) {
-  settingsStore.setEpubDisplayMode(props.paneIndex, mode);
-}
+const urlFontSize = computed(() => {
+  return settingsStore.urlFontSizes[props.paneIndex] || 100;
+});
 
 // Handle click on progress bar to navigate to position
 function handleProgressClick(event) {
@@ -165,12 +211,21 @@ function handleProgressClick(event) {
 
   // Navigate to the clicked position
   const type = readerStore.fileTypes[props.paneIndex];
-  if (type === 'epub') {
+  if (type === "epub") {
     epubReader.setScrollByRatio(ratio);
     scrollProgress.value = ratio;
-  } else if (type === 'pdf') {
+  } else if (type === "pdf") {
     const targetPage = Math.round(ratio * (pdfReader.totalPages.value - 1)) + 1;
     pdfReader.goToPage(targetPage);
+  } else if (type === "markdown") {
+    markdownReader.setScrollByRatio(ratio);
+    scrollProgress.value = ratio;
+  } else if (type === "url") {
+    webReader.setScrollByRatio(ratio);
+    const scrollInfo = webReader.getScrollInfo?.();
+    if (scrollInfo && typeof scrollInfo.scrollRatio === "number") {
+      scrollProgress.value = scrollInfo.scrollRatio;
+    }
   }
 }
 
@@ -199,8 +254,15 @@ const progressPercent = computed(() => {
     if (total <= 1) return 100;
     return ((current - 1) / (total - 1)) * 100;
   }
-  // For EPUB, use scroll progress
-  return scrollProgress.value * 100;
+  // For EPUB, Markdown, and URL, use scroll progress
+  if (type === "epub" || type === "markdown" || type === "url") {
+    const scrollInfo = activeReader.value?.getScrollInfo?.();
+    if (scrollInfo && typeof scrollInfo.scrollRatio === "number") {
+      return scrollInfo.scrollRatio * 100;
+    }
+    return scrollProgress.value * 100;
+  }
+  return 0;
 });
 
 // Whether to show progress bar
@@ -213,13 +275,24 @@ onMounted(() => {
   if (readerView.value) {
     epubReader.containerRef.value = readerView.value;
     pdfReader.containerRef.value = readerView.value;
+    markdownReader.containerRef.value = readerView.value;
+    webReader.containerRef.value = readerView.value;
   }
 
-  // Set up scroll callback for EPUB sync
+  // Set up scroll callback for progress update only (scroll sync is handled by wheel events)
   epubReader.setOnScroll(() => {
-    emit("scroll", props.paneIndex);
     updateScrollProgress();
   });
+
+  // Set up scroll listener for markdown and URL
+  if (readerView.value) {
+    const handleScroll = () => {
+      updateScrollProgress();
+    };
+    readerView.value.addEventListener("scroll", handleScroll, {
+      passive: true,
+    });
+  }
 });
 
 // Watch for container changes
@@ -227,6 +300,20 @@ watch(readerView, (newVal) => {
   if (newVal) {
     epubReader.containerRef.value = newVal;
     pdfReader.containerRef.value = newVal;
+    markdownReader.containerRef.value = newVal;
+    webReader.containerRef.value = newVal;
+  }
+});
+
+// Watch for URL mode changes and resize iframe
+watch(isUrlMode, (newVal) => {
+  if (newVal && webReader && typeof webReader.resize === "function") {
+    // Wait for next tick to ensure DOM is updated
+    nextTick(() => {
+      setTimeout(() => {
+        webReader.resize();
+      }, 100);
+    });
   }
 });
 
@@ -249,10 +336,35 @@ async function openFile(file) {
     await epubReader.openFile(file);
   } else if (extension === "pdf") {
     await pdfReader.openFile(file);
+  } else if (extension === "md" || extension === "markdown") {
+    await markdownReader.openFile(file);
   } else {
+    // Try to open as URL if it looks like a URL
+    const fileName = file.name.toLowerCase();
+    if (
+      fileName.includes("url") ||
+      fileName.includes("link") ||
+      fileName.endsWith(".txt")
+    ) {
+      // Read as text and try to parse as URL
+      try {
+        const text = await file.text();
+        const trimmedText = text.trim();
+        if (
+          trimmedText.startsWith("http://") ||
+          trimmedText.startsWith("https://") ||
+          (trimmedText.includes(".") && !trimmedText.includes(" "))
+        ) {
+          await webReader.openUrl(trimmedText);
+          return;
+        }
+      } catch (e) {
+        // Fall through to error
+      }
+    }
     readerStore.setError(
       props.paneIndex,
-      "対応していないファイル形式です。EPUB または PDF を選択してください。"
+      "対応していないファイル形式です。EPUB、PDF、Markdown、またはURLを選択してください。"
     );
   }
 }
@@ -260,40 +372,137 @@ async function openFile(file) {
 // Handle navigation
 function handleNavigate(href) {
   activeReader.value?.goTo(href);
+  // 目次からのナビゲーションを親に通知（スクロール同期を無効化するため）
+  emit("navigate", props.paneIndex, "toc", href);
 }
 
+/**
+ * 次へボタンのハンドラー
+ *
+ * 仕様: READER_SPECIFICATIONS.md を参照
+ * - ソースペインのnext()を実行
+ * - スクロール同期モードが有効な場合、App.vueのhandleNavigateでターゲットペインも同期される
+ */
 function handleNext() {
-  activeReader.value?.next();
+  console.log("handleNext called", {
+    paneIndex: props.paneIndex,
+    fileType: readerStore.fileTypes[props.paneIndex],
+    hasActiveReader: !!activeReader.value,
+    hasNext: typeof activeReader.value?.next === "function",
+  });
+
+  if (activeReader.value && typeof activeReader.value.next === "function") {
+    activeReader.value.next();
+  } else {
+    console.warn(
+      "handleNext: activeReader.next is not available",
+      activeReader.value
+    );
+  }
+
   emit("navigate", props.paneIndex, "next");
 }
 
+/**
+ * 前へボタンのハンドラー
+ *
+ * 仕様: READER_SPECIFICATIONS.md を参照
+ * - ソースペインのprev()を実行
+ * - スクロール同期モードが有効な場合、App.vueのhandleNavigateでターゲットペインも同期される
+ */
 function handlePrev() {
-  activeReader.value?.prev();
+  console.log("handlePrev called", {
+    paneIndex: props.paneIndex,
+    fileType: readerStore.fileTypes[props.paneIndex],
+    hasActiveReader: !!activeReader.value,
+    hasPrev: typeof activeReader.value?.prev === "function",
+  });
+
+  if (activeReader.value && typeof activeReader.value.prev === "function") {
+    activeReader.value.prev();
+  } else {
+    console.warn(
+      "handlePrev: activeReader.prev is not available",
+      activeReader.value
+    );
+  }
+
   emit("navigate", props.paneIndex, "prev");
+}
+
+// Toggle progress bar
+function toggleProgressBar() {
+  settingsStore.setShowProgressBar(
+    props.paneIndex,
+    !settingsStore.showProgressBar[props.paneIndex]
+  );
+}
+
+// Font size controls for URL mode
+function increaseFontSize() {
+  if (!isUrlMode.value) return;
+  const currentSize = settingsStore.urlFontSizes[props.paneIndex] || 100;
+  const newSize = Math.min(200, currentSize + 10);
+  settingsStore.setUrlFontSize(props.paneIndex, newSize);
+  if (webReader && typeof webReader.applyFontSize === "function") {
+    webReader.applyFontSize(newSize);
+  } else {
+    console.warn("webReader.applyFontSize is not available");
+  }
+}
+
+function decreaseFontSize() {
+  if (!isUrlMode.value) return;
+  const currentSize = settingsStore.urlFontSizes[props.paneIndex] || 100;
+  const newSize = Math.max(50, currentSize - 10);
+  settingsStore.setUrlFontSize(props.paneIndex, newSize);
+  if (webReader && typeof webReader.applyFontSize === "function") {
+    webReader.applyFontSize(newSize);
+  } else {
+    console.warn("webReader.applyFontSize is not available");
+  }
+}
+
+// Open URL
+async function openUrl(url) {
+  await webReader.openUrl(url);
 }
 
 // Expose methods for parent
 defineExpose({
   openFile,
+  openUrl,
   getScrollInfo: () => activeReader.value?.getScrollInfo(),
   setScrollByRatio: (ratio) => activeReader.value?.setScrollByRatio(ratio),
   resize: () => activeReader.value?.resize?.(),
   next: () => {
     const type = readerStore.fileTypes[props.paneIndex];
-    if (type === 'epub') epubReader.next?.();
-    else if (type === 'pdf') pdfReader.next?.();
+    if (type === "epub") epubReader.next?.();
+    else if (type === "pdf") pdfReader.next?.();
+    else if (type === "markdown") markdownReader.next?.();
+    else if (type === "url") webReader.next?.();
   },
   prev: () => {
     const type = readerStore.fileTypes[props.paneIndex];
-    if (type === 'epub') epubReader.prev?.();
-    else if (type === 'pdf') pdfReader.prev?.();
+    if (type === "epub") epubReader.prev?.();
+    else if (type === "pdf") pdfReader.prev?.();
+    else if (type === "markdown") markdownReader.prev?.();
+    else if (type === "url") webReader.prev?.();
   },
-  scrollBy: (distance) => epubReader.scrollBy?.(distance),
+  scrollBy: (distance) => {
+    const type = readerStore.fileTypes[props.paneIndex];
+    if (type === "epub") epubReader.scrollBy?.(distance);
+    else if (type === "markdown") markdownReader.scrollBy?.(distance);
+    else if (type === "url") webReader.scrollBy?.(distance);
+  },
   pageBy: (pages) => pdfReader.goToPage?.(pdfReader.currentPage.value + pages),
   applySettings: () => {
-    if (readerStore.fileTypes[props.paneIndex] === 'epub') {
-      epubReader.applyTheme()
-      epubReader.applySettings()
+    const type = readerStore.fileTypes[props.paneIndex];
+    if (type === "epub") {
+      epubReader.applyTheme();
+      epubReader.applySettings();
+    } else if (type === "markdown") {
+      markdownReader.applySettings();
     }
   },
 });
@@ -302,6 +511,8 @@ defineExpose({
 onUnmounted(() => {
   epubReader.cleanup();
   pdfReader.cleanup();
+  markdownReader.cleanup();
+  webReader.cleanup();
 });
 </script>
 
@@ -312,6 +523,11 @@ onUnmounted(() => {
   flex-direction: column;
   min-width: 0;
   min-height: 0;
+}
+
+/* URL mode: enforce full height */
+.reader-pane-container.url-mode {
+  height: 100%;
 }
 
 .reader-wrapper {
@@ -334,6 +550,13 @@ onUnmounted(() => {
   flex-direction: row;
 }
 
+/* URL mode: ensure full width when TOC is hidden */
+.reader-wrapper.url-mode {
+  width: 100%;
+  min-width: 0;
+  height: 100%;
+}
+
 .reader-content {
   flex: 1;
   display: flex;
@@ -341,6 +564,15 @@ onUnmounted(() => {
   min-width: 0;
   position: relative;
   overflow: hidden;
+}
+
+/* URL mode: ensure full width */
+.reader-content.url-mode {
+  width: 100%;
+  min-width: 0;
+  flex: 1 1 auto;
+  height: 100%;
+  overflow: auto !important;
 }
 
 .reader-content.dragover::after {
@@ -358,6 +590,27 @@ onUnmounted(() => {
   flex: 1;
   overflow-y: auto;
   background: var(--bg-primary);
+  min-height: 0;
+}
+
+/* URL mode: full size, no scrollbar on container */
+.reader-view.url-mode {
+  overflow: auto !important;
+  width: 100%;
+  height: 100%;
+  position: relative;
+}
+
+/* Ensure iframe inside URL mode is scrollable */
+:deep(.web-reader-iframe) {
+  width: 100% !important;
+  height: 100% !important;
+  overflow: auto !important;
+  position: absolute;
+  inset: 0;
+  border: none;
+  background: white;
+  min-width: 0;
   min-height: 0;
 }
 
@@ -473,6 +726,8 @@ onUnmounted(() => {
   justify-content: flex-end;
 }
 
+/* URL mode: button text is changed to ↑ 上 / ↓ 下 */
+
 .navigation-group button {
   padding: 0.5rem 0.75rem;
   border: 1px solid var(--border-color);
@@ -489,6 +744,24 @@ onUnmounted(() => {
   border-color: var(--accent-color);
 }
 
+.navigation-group .progress-toggle {
+  padding: 0.3rem 0.5rem;
+  font-size: 0.9rem;
+  line-height: 1;
+  color: var(--text-tertiary);
+}
+
+.navigation-group .progress-toggle:hover {
+  background: var(--bg-hover);
+  border-color: var(--accent-color);
+}
+
+.navigation-group .progress-toggle.active {
+  background: var(--accent-color);
+  border-color: var(--accent-color);
+  color: white;
+}
+
 .file-info {
   margin-left: auto;
   font-size: 0.75rem;
@@ -499,37 +772,42 @@ onUnmounted(() => {
   white-space: nowrap;
 }
 
-/* Display Mode Toggle */
-.display-mode-toggle {
+/* Font size controls for URL mode */
+.font-size-controls {
   display: flex;
-  margin-left: 0.5rem;
+  align-items: center;
+  gap: 0.5rem;
+  width: 100%;
+  justify-content: center;
+}
+
+.font-size-btn {
+  padding: 0.3rem 0.6rem;
   border: 1px solid var(--border-color);
   border-radius: 6px;
-  overflow: hidden;
-}
-
-.display-mode-toggle button {
-  padding: 0.35rem 0.6rem;
-  border: none;
-  border-radius: 0;
   background: var(--bg-primary);
-  color: var(--text-secondary);
+  color: var(--text-primary);
   cursor: pointer;
-  font-size: 0.75rem;
+  font-size: 1rem;
+  font-weight: 600;
+  line-height: 1;
   transition: all 0.15s;
+  min-width: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
-.display-mode-toggle button:not(:last-child) {
-  border-right: 1px solid var(--border-color);
-}
-
-.display-mode-toggle button:hover {
+.font-size-btn:hover {
   background: var(--bg-hover);
+  border-color: var(--accent-color);
 }
 
-.display-mode-toggle button.active {
-  background: var(--accent-color);
-  color: white;
+.font-size-display {
+  font-size: 0.85rem;
+  color: var(--text-secondary);
+  min-width: 3em;
+  text-align: center;
 }
 
 /* PDF specific styles */
