@@ -235,6 +235,11 @@ export function useEpubReader(paneIndex) {
     }
   }
 
+  // Yield to UI thread to prevent freezing
+  function yieldToUI() {
+    return new Promise(resolve => requestAnimationFrame(resolve))
+  }
+
   // Load and render a section's content
   async function loadSectionContent(section, sectionIndex, placeholder) {
     if (loadedSections.value.has(sectionIndex)) return
@@ -252,28 +257,16 @@ export function useEpubReader(paneIndex) {
 
       const body = doc.body
       if (body) {
-        // Process images
-        const images = body.querySelectorAll('img')
-        for (const img of images) {
-          const src = img.getAttribute('src')
-          if (src && !src.startsWith('data:') && !src.startsWith('http')) {
-            try {
-              const resolvedHref = section.resolveHref?.(src) || src
-              const blob = await book.value.loadBlob?.(resolvedHref)
-              if (blob) {
-                const blobUrl = URL.createObjectURL(blob)
-                blobUrls.value.push(blobUrl)
-                img.src = blobUrl
-              }
-            } catch (e) {
-              // Silently ignore image loading errors
-            }
-          }
-        }
-
+        // Clone content first (fast operation)
         Array.from(body.childNodes).forEach(node => {
           sectionDiv.appendChild(node.cloneNode(true))
         })
+
+        // Process images asynchronously after DOM insertion (non-blocking)
+        const images = sectionDiv.querySelectorAll('img')
+        if (images.length > 0) {
+          processImagesAsync(images, section)
+        }
       }
 
       // Replace placeholder with actual content
@@ -285,6 +278,34 @@ export function useEpubReader(paneIndex) {
     } catch (error) {
       console.error('Error loading section:', sectionIndex, error)
       return null
+    }
+  }
+
+  // Process images asynchronously without blocking UI
+  async function processImagesAsync(images, section) {
+    for (const img of images) {
+      const src = img.getAttribute('src')
+      if (src && !src.startsWith('data:') && !src.startsWith('http')) {
+        // Don't await - process in background
+        loadImageBlob(img, src, section).catch(() => {
+          // Silently ignore image loading errors
+        })
+      }
+    }
+  }
+
+  // Load a single image blob
+  async function loadImageBlob(img, src, section) {
+    try {
+      const resolvedHref = section.resolveHref?.(src) || src
+      const blob = await book.value.loadBlob?.(resolvedHref)
+      if (blob) {
+        const blobUrl = URL.createObjectURL(blob)
+        blobUrls.value.push(blobUrl)
+        img.src = blobUrl
+      }
+    } catch (e) {
+      // Silently ignore
     }
   }
 
@@ -337,6 +358,45 @@ export function useEpubReader(paneIndex) {
       if (placeholder) {
         await loadSectionContent(linearSections[i], i, placeholder)
       }
+    }
+  }
+
+  // Load remaining sections progressively for page mode (non-blocking)
+  async function loadRemainingSectionsProgressively(linearSections, sectionContainer, startIndex) {
+    const BATCH_SIZE = 3 // Load N sections per batch
+    const BATCH_DELAY = 50 // ms between batches
+
+    for (let i = startIndex; i < linearSections.length; i += BATCH_SIZE) {
+      // Yield to UI thread between batches
+      await yieldToUI()
+
+      // Load a batch of sections
+      const batchEnd = Math.min(i + BATCH_SIZE, linearSections.length)
+      const batchPromises = []
+
+      for (let j = i; j < batchEnd; j++) {
+        if (loadedSections.value.has(j)) continue
+
+        const placeholder = sectionContainer?.querySelector(
+          `.epub-section-placeholder[data-section-index="${j}"]`
+        )
+        if (placeholder) {
+          batchPromises.push(loadSectionContent(linearSections[j], j, placeholder))
+        }
+      }
+
+      // Wait for batch to complete
+      if (batchPromises.length > 0) {
+        await Promise.all(batchPromises)
+      }
+
+      // Recalculate pages after each batch
+      if (settingsStore.epubDisplayModes[paneIndex] === 'page') {
+        calculateTotalPages()
+      }
+
+      // Small delay to allow UI updates
+      await new Promise(resolve => setTimeout(resolve, BATCH_DELAY))
     }
   }
 
@@ -405,27 +465,20 @@ export function useEpubReader(paneIndex) {
       const placeholders = contentWrapper.value.querySelectorAll('.epub-section-placeholder')
       placeholders.forEach(p => intersectionObserver?.observe(p))
 
-      // Load sections
-      if (isPageMode) {
-        // Page mode: load all sections for accurate page calculation
-        for (let i = 0; i < linearSections.length; i++) {
-          const placeholder = sectionContainer.querySelector(
-            `.epub-section-placeholder[data-section-index="${i}"]`
-          )
-          if (placeholder) {
-            await loadSectionContent(linearSections[i], i, placeholder)
-          }
+      // Load initial sections first to show content quickly
+      const initialCount = Math.min(INITIAL_SECTIONS, linearSections.length)
+      for (let i = 0; i < initialCount; i++) {
+        const placeholder = sectionContainer.querySelector(
+          `.epub-section-placeholder[data-section-index="${i}"]`
+        )
+        if (placeholder) {
+          await loadSectionContent(linearSections[i], i, placeholder)
         }
-      } else {
-        // Scroll mode: load initial sections, lazy load the rest
-        for (let i = 0; i < Math.min(INITIAL_SECTIONS, linearSections.length); i++) {
-          const placeholder = contentWrapper.value.querySelector(
-            `.epub-section-placeholder[data-section-index="${i}"]`
-          )
-          if (placeholder) {
-            await loadSectionContent(linearSections[i], i, placeholder)
-          }
-        }
+      }
+
+      // For page mode, load remaining sections progressively in background
+      if (isPageMode && linearSections.length > initialCount) {
+        loadRemainingSectionsProgressively(linearSections, sectionContainer, initialCount)
       }
 
       // Cleanup temp view
