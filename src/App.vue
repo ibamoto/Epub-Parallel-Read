@@ -70,8 +70,8 @@ const globalError = ref('')
 const isResizing = ref(false)
 const showSettings = ref(false)
 let isSyncing = false
-let isNavigating = false
 let syncTimeout = null
+let keyboardNavLock = false  // Lock to prevent scroll sync during keyboard navigation
 
 // Theme class
 const themeClass = computed(() => ({
@@ -95,7 +95,7 @@ onUnmounted(() => {
   window.removeEventListener('resize', handleWindowResize)
   if (syncTimeout) clearTimeout(syncTimeout)
   isSyncing = false
-  isNavigating = false
+  keyboardNavLock = false
 })
 
 // Handle file selection from control bar
@@ -129,10 +129,10 @@ async function handleHistorySelect(paneIndex, file) {
   }
 }
 
-// Handle scroll sync
+// Handle scroll sync (only for mouse/touch scroll, not keyboard navigation)
 function handleScroll(sourceIndex) {
-  // Skip sync if already syncing, navigating, or sync mode is off
-  if (!settingsStore.syncMode || isSyncing || isNavigating) return
+  // Skip sync if keyboard navigation is active, already syncing, or sync mode is off
+  if (!settingsStore.syncMode || isSyncing || keyboardNavLock) return
 
   isSyncing = true
 
@@ -148,18 +148,19 @@ function handleScroll(sourceIndex) {
   // Clear any existing timeout
   if (syncTimeout) clearTimeout(syncTimeout)
 
-  // Use longer timeout to cover async section loading (300ms should be enough)
+  // Use longer timeout to cover async section loading
   syncTimeout = setTimeout(() => {
     isSyncing = false
   }, 300)
 }
 
-// Handle navigation sync
+// Handle navigation sync (from button clicks)
 function handleNavigate(sourceIndex, direction) {
-  if (!settingsStore.syncMode || isNavigating) return
+  // Skip if sync mode is off or keyboard nav is active
+  if (!settingsStore.syncMode || keyboardNavLock) return
 
-  // Set navigating flag to prevent scroll sync during navigation
-  isNavigating = true
+  // Lock to prevent scroll sync feedback
+  keyboardNavLock = true
 
   const target = sourceIndex === 0 ? reader2.value : reader1.value
   if (direction === 'next') {
@@ -168,10 +169,10 @@ function handleNavigate(sourceIndex, direction) {
     target?.prev?.()
   }
 
-  // Reset navigating flag after navigation completes
+  // Reset lock after navigation animation completes
   setTimeout(() => {
-    isNavigating = false
-  }, 500)
+    keyboardNavLock = false
+  }, 600)
 }
 
 // Resize handling
@@ -233,13 +234,13 @@ function handleKeyDown(event) {
   // Skip if no files are open
   if (!fileType1 && !fileType2) return
 
-  // Prevent scroll sync during keyboard navigation (must be set BEFORE navigation)
-  // Use longer timeout to wait for smooth scroll animation to complete
-  isSyncing = true
+  // Lock scroll sync during keyboard navigation to prevent feedback loops
+  // Both panes will navigate directly, no scroll-based sync needed
+  keyboardNavLock = true
   if (syncTimeout) clearTimeout(syncTimeout)
   syncTimeout = setTimeout(() => {
-    isSyncing = false
-  }, 500) // Extended to 500ms to cover smooth scroll animation
+    keyboardNavLock = false
+  }, 800) // Extended timeout to cover smooth scroll animations
 
   // Left/Right arrows: page navigation for both EPUB and PDF
   if (event.key === 'ArrowLeft') {
