@@ -83,24 +83,26 @@ export function useEpubReader(paneIndex) {
 
     if (isPageMode) {
       // Page mode: use CSS columns for pagination
+      // Note: column-width will be set dynamically via JavaScript
       styles += `
         .epub-content-${paneIndex} {
           overflow: hidden;
           padding: 0;
+          position: relative;
         }
 
         .epub-content-${paneIndex} .epub-column-wrapper {
-          height: 100%;
-          column-width: calc(100% - ${settings.marginLeft + settings.marginRight}px);
-          column-gap: ${settings.marginLeft + settings.marginRight}px;
+          height: calc(100% - ${settings.marginTop + settings.marginBottom}px);
+          margin: ${settings.marginTop}px 0 ${settings.marginBottom}px 0;
+          column-gap: 0;
           column-fill: auto;
-          padding: ${settings.marginTop}px ${settings.marginRight}px ${settings.marginBottom}px ${settings.marginLeft}px;
           box-sizing: border-box;
           transition: transform 0.3s ease;
         }
 
         .epub-content-${paneIndex} .epub-section {
-          break-inside: avoid-column;
+          padding-left: ${settings.marginLeft}px;
+          padding-right: ${settings.marginRight}px;
           margin-bottom: 2em;
           padding-bottom: 1em;
           border-bottom: 1px solid ${colors.text}20;
@@ -113,7 +115,8 @@ export function useEpubReader(paneIndex) {
           justify-content: center;
           color: ${colors.text}40;
           font-size: 0.9em;
-          break-inside: avoid;
+          padding-left: ${settings.marginLeft}px;
+          padding-right: ${settings.marginRight}px;
         }
       `
     } else {
@@ -187,16 +190,22 @@ export function useEpubReader(paneIndex) {
 
     if (containerWidth === 0) return
 
-    // Total scrollable width divided by container width = total pages
-    const scrollWidth = wrapper.scrollWidth
-    const pages = Math.max(1, Math.ceil(scrollWidth / containerWidth))
-    totalPages.value = pages
+    // Set column-width dynamically based on container width
+    wrapper.style.columnWidth = `${containerWidth}px`
 
-    // Ensure current page is within bounds
-    if (currentPage.value >= pages) {
-      currentPage.value = pages - 1
-      updatePagePosition()
-    }
+    // Wait for browser to recalculate layout
+    requestAnimationFrame(() => {
+      // Total scrollable width divided by container width = total pages
+      const scrollWidth = wrapper.scrollWidth
+      const pages = Math.max(1, Math.ceil(scrollWidth / containerWidth))
+      totalPages.value = pages
+
+      // Ensure current page is within bounds
+      if (currentPage.value >= pages) {
+        currentPage.value = pages - 1
+        updatePagePosition()
+      }
+    })
   }
 
   function updatePagePosition() {
@@ -444,13 +453,19 @@ export function useEpubReader(paneIndex) {
 
       isReady.value = true
 
-      // Page mode: calculate pages after content is loaded
+      // Page mode: set initial column width and calculate pages after content is loaded
       if (isPageMode) {
+        // Set initial column width immediately
+        const containerWidth = contentWrapper.value.clientWidth
+        if (containerWidth > 0 && columnWrapper.value) {
+          columnWrapper.value.style.columnWidth = `${containerWidth}px`
+        }
+
         setTimeout(() => {
           calculateTotalPages()
           // Setup display mode watcher
           setupDisplayModeWatcher()
-        }, 100)
+        }, 150)
       } else {
         setupDisplayModeWatcher()
       }
@@ -467,19 +482,29 @@ export function useEpubReader(paneIndex) {
   function goTo(href) {
     if (!contentWrapper.value) return
 
+    const isPageMode = settingsStore.epubDisplayModes[paneIndex] === 'page'
+    const container = isPageMode ? columnWrapper.value : contentWrapper.value
+
+    if (!container) return
+
     for (let i = 0; i < sections.value.length; i++) {
       const section = sections.value[i]
       if (section.id === href || section.href === href) {
-        const sectionEl = contentWrapper.value.querySelector(`[data-section-index="${i}"]`)
+        const sectionEl = container.querySelector(`[data-section-index="${i}"]`)
         if (sectionEl) {
-          // Ensure section is loaded before scrolling
-          if (sectionEl.dataset.loaded === 'false') {
-            loadSectionsInRange(i, i + BUFFER_SECTIONS).then(() => {
-              const loadedEl = contentWrapper.value.querySelector(`[data-section-index="${i}"]`)
-              loadedEl?.scrollIntoView({ behavior: 'smooth' })
-            })
+          if (isPageMode) {
+            // Page mode: calculate which page contains this section
+            navigateToElement(sectionEl)
           } else {
-            sectionEl.scrollIntoView({ behavior: 'smooth' })
+            // Scroll mode: ensure section is loaded before scrolling
+            if (sectionEl.dataset.loaded === 'false') {
+              loadSectionsInRange(i, i + BUFFER_SECTIONS).then(() => {
+                const loadedEl = container.querySelector(`[data-section-index="${i}"]`)
+                loadedEl?.scrollIntoView({ behavior: 'smooth' })
+              })
+            } else {
+              sectionEl.scrollIntoView({ behavior: 'smooth' })
+            }
           }
           savePosition()
           return
@@ -487,11 +512,38 @@ export function useEpubReader(paneIndex) {
       }
     }
 
-    const element = contentWrapper.value.querySelector(`[id="${href}"], [name="${href}"]`)
+    const element = container.querySelector(`[id="${href}"], [name="${href}"]`)
     if (element) {
-      element.scrollIntoView({ behavior: 'smooth' })
+      if (isPageMode) {
+        navigateToElement(element)
+      } else {
+        element.scrollIntoView({ behavior: 'smooth' })
+      }
       savePosition()
     }
+  }
+
+  // Navigate to a specific element in page mode
+  function navigateToElement(element) {
+    if (!columnWrapper.value || !contentWrapper.value) return
+
+    const containerWidth = contentWrapper.value.clientWidth
+    if (containerWidth === 0) return
+
+    // Get the element's position relative to the column wrapper
+    const elementRect = element.getBoundingClientRect()
+    const wrapperRect = columnWrapper.value.getBoundingClientRect()
+
+    // Calculate the current transform offset
+    const currentOffset = currentPage.value * containerWidth
+
+    // Calculate element's actual position in the document
+    const elementLeft = elementRect.left - wrapperRect.left + currentOffset
+
+    // Calculate which page the element is on
+    const targetPage = Math.floor(elementLeft / containerWidth)
+
+    goToPage(targetPage)
   }
 
   function next() {
