@@ -445,11 +445,8 @@ export function useEpubReader(paneIndex) {
       readerStore.setFileName(paneIndex, file.name)
       readerStore.setFile(paneIndex, file)
 
-      // Restore saved position
+      // Get saved position before setting isReady
       const savedLocation = readerStore.currentLocations[paneIndex]
-      if (savedLocation && typeof savedLocation === 'object') {
-        restorePosition(savedLocation)
-      }
 
       isReady.value = true
 
@@ -463,10 +460,18 @@ export function useEpubReader(paneIndex) {
 
         setTimeout(() => {
           calculateTotalPages()
+          // Restore position AFTER pages are calculated
+          if (savedLocation && typeof savedLocation === 'object') {
+            setTimeout(() => restorePosition(savedLocation), 50)
+          }
           // Setup display mode watcher
           setupDisplayModeWatcher()
         }, 150)
       } else {
+        // Scroll mode: restore position immediately
+        if (savedLocation && typeof savedLocation === 'object') {
+          restorePosition(savedLocation)
+        }
         setupDisplayModeWatcher()
       }
 
