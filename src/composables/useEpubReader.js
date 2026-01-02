@@ -565,7 +565,7 @@ export function useEpubReader(paneIndex) {
     }
   }
 
-  function goTo(href) {
+  async function goTo(href) {
     if (!isReady.value || !contentWrapper.value) return
 
     const isPageMode = settingsStore.epubDisplayModes[paneIndex] === 'page'
@@ -600,7 +600,7 @@ export function useEpubReader(paneIndex) {
       if (sectionEl) {
         const isLoaded = sectionEl.dataset.loaded === 'true'
 
-        const navigateToSection = () => {
+        const navigateToSection = async () => {
           const loadedEl = container.querySelector(`[data-section-index="${sectionIndex}"]`)
           if (!loadedEl) return
 
@@ -629,11 +629,29 @@ export function useEpubReader(paneIndex) {
         }
 
         if (!isLoaded) {
-          loadSectionsInRange(sectionIndex, sectionIndex + BUFFER_SECTIONS).then(() => {
-            setTimeout(navigateToSection, 50)
-          })
+          // Load ALL sections from 0 to target to ensure accurate scroll position
+          // This is necessary because placeholder heights differ from actual content
+          await loadSectionsInRange(0, sectionIndex + BUFFER_SECTIONS)
+          // Wait for DOM to fully render
+          await new Promise(resolve => setTimeout(resolve, 100))
+          await navigateToSection()
         } else {
-          navigateToSection()
+          // Section is loaded, but check if sections before it are loaded
+          // If not, load them first for accurate positioning
+          let needsPreload = false
+          for (let i = 0; i < sectionIndex; i++) {
+            const el = container.querySelector(`[data-section-index="${i}"]`)
+            if (el && el.dataset.loaded !== 'true') {
+              needsPreload = true
+              break
+            }
+          }
+
+          if (needsPreload) {
+            await loadSectionsInRange(0, sectionIndex)
+            await new Promise(resolve => setTimeout(resolve, 100))
+          }
+          await navigateToSection()
         }
         return
       }
