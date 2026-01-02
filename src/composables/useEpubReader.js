@@ -36,6 +36,7 @@ export function useEpubReader(paneIndex) {
   const totalPages = ref(1)
   const columnWrapper = ref(null) // Inner wrapper for column layout
   let displayModeWatcher = null
+  let wheelHandler = null
 
   // Process TOC to flat structure
   function processToc(toc) {
@@ -290,6 +291,9 @@ export function useEpubReader(paneIndex) {
         placeholder.parentNode.replaceChild(sectionDiv, placeholder)
       }
 
+      // Setup link handlers for internal navigation
+      setupLinkHandlers(sectionDiv)
+
       return sectionDiv
     } catch (error) {
       console.error('Error loading section:', sectionIndex, error)
@@ -445,6 +449,9 @@ export function useEpubReader(paneIndex) {
       readerStore.setFileName(paneIndex, file.name)
       readerStore.setFile(paneIndex, file)
 
+      // Setup wheel handler for page/scroll navigation
+      setupWheelHandler()
+
       // Get saved position before setting isReady
       const savedLocation = readerStore.currentLocations[paneIndex]
 
@@ -492,23 +499,56 @@ export function useEpubReader(paneIndex) {
 
     if (!container) return
 
-    for (let i = 0; i < sections.value.length; i++) {
-      const section = sections.value[i]
-      if (section.id === href || section.href === href) {
+    // Parse href - may contain fragment identifier (#)
+    const [path, fragment] = href.split('#')
+
+    // Get linear sections (same order as displayed)
+    const linearSections = sections.value.filter(s => s.linear !== 'no')
+
+    // Find matching section
+    for (let i = 0; i < linearSections.length; i++) {
+      const section = linearSections[i]
+      const sectionHref = section.href || ''
+
+      // Check if href matches (with or without fragment)
+      const hrefMatches = sectionHref === href ||
+        sectionHref === path ||
+        sectionHref.endsWith('/' + path) ||
+        path.endsWith('/' + sectionHref) ||
+        section.id === href ||
+        section.id === path
+
+      if (hrefMatches) {
         const sectionEl = container.querySelector(`[data-section-index="${i}"]`)
         if (sectionEl) {
+          // If there's a fragment, try to find the element within the section
+          let targetElement = sectionEl
+          if (fragment) {
+            const fragmentEl = sectionEl.querySelector(`#${fragment}, [name="${fragment}"]`)
+            if (fragmentEl) {
+              targetElement = fragmentEl
+            }
+          }
+
           if (isPageMode) {
-            // Page mode: calculate which page contains this section
-            navigateToElement(sectionEl)
+            // Page mode: calculate which page contains this element
+            navigateToElement(targetElement)
           } else {
             // Scroll mode: ensure section is loaded before scrolling
             if (sectionEl.dataset.loaded === 'false') {
               loadSectionsInRange(i, i + BUFFER_SECTIONS).then(() => {
                 const loadedEl = container.querySelector(`[data-section-index="${i}"]`)
-                loadedEl?.scrollIntoView({ behavior: 'smooth' })
+                if (loadedEl) {
+                  let target = loadedEl
+                  if (fragment) {
+                    const fragEl = loadedEl.querySelector(`#${fragment}, [name="${fragment}"]`)
+                    if (fragEl) target = fragEl
+                  }
+                  target.scrollIntoView({ behavior: 'smooth' })
+                }
               })
             } else {
-              sectionEl.scrollIntoView({ behavior: 'smooth' })
+              targetElement.scrollIntoView({ behavior: 'smooth' })
             }
           }
           savePosition()
@@ -517,14 +557,18 @@ export function useEpubReader(paneIndex) {
       }
     }
 
-    const element = container.querySelector(`[id="${href}"], [name="${href}"]`)
-    if (element) {
-      if (isPageMode) {
-        navigateToElement(element)
-      } else {
-        element.scrollIntoView({ behavior: 'smooth' })
+    // Fallback: try to find element by ID/name directly in the container
+    if (fragment || href) {
+      const searchId = fragment || href
+      const element = container.querySelector(`#${searchId}, [name="${searchId}"]`)
+      if (element) {
+        if (isPageMode) {
+          navigateToElement(element)
+        } else {
+          element.scrollIntoView({ behavior: 'smooth' })
+        }
+        savePosition()
       }
-      savePosition()
     }
   }
 
@@ -669,6 +713,88 @@ export function useEpubReader(paneIndex) {
     onScrollCallback = callback
   }
 
+  // Setup wheel event handler for EPUB navigation
+  function setupWheelHandler() {
+    if (!contentWrapper.value) return
+
+    // Remove existing handler if any
+    if (wheelHandler) {
+      contentWrapper.value.removeEventListener('wheel', wheelHandler)
+    }
+
+    wheelHandler = (e) => {
+      const isPageMode = settingsStore.epubDisplayModes[paneIndex] === 'page'
+
+      if (isPageMode) {
+        // Page mode: prevent default and navigate pages
+        e.preventDefault()
+
+        // Debounce to prevent too rapid page changes
+        if (wheelHandler.lastTime && Date.now() - wheelHandler.lastTime < 250) {
+          return
+        }
+        wheelHandler.lastTime = Date.now()
+
+        if (e.deltaY > 0) {
+          nextPage()
+        } else if (e.deltaY < 0) {
+          prevPage()
+        }
+      } else {
+        // Scroll mode: use scroll amount setting if useWheelAmount is enabled
+        if (settingsStore.useWheelAmount) {
+          e.preventDefault()
+
+          // Debounce
+          if (wheelHandler.lastTime && Date.now() - wheelHandler.lastTime < 50) {
+            return
+          }
+          wheelHandler.lastTime = Date.now()
+
+          const scrollAmount = settingsStore.scrollAmounts[paneIndex] || 100
+          const direction = e.deltaY > 0 ? 1 : -1
+          contentWrapper.value.scrollBy({
+            top: direction * scrollAmount,
+            behavior: 'smooth'
+          })
+          savePosition()
+        }
+        // If useWheelAmount is false, let native scroll handle it
+      }
+    }
+
+    contentWrapper.value.addEventListener('wheel', wheelHandler, { passive: false })
+  }
+
+  // Handle internal link clicks
+  function handleLinkClick(e) {
+    const link = e.target.closest('a')
+    if (!link) return
+
+    const href = link.getAttribute('href')
+    if (!href) return
+
+    // Skip external links
+    if (href.startsWith('http://') || href.startsWith('https://') || href.startsWith('mailto:')) {
+      return
+    }
+
+    // Prevent default navigation
+    e.preventDefault()
+    e.stopPropagation()
+
+    // Navigate using goTo
+    goTo(href)
+  }
+
+  // Setup link handlers for a section element
+  function setupLinkHandlers(sectionEl) {
+    if (!sectionEl) return
+
+    // Add click listener to section for link handling
+    sectionEl.addEventListener('click', handleLinkClick)
+  }
+
   function getScrollInfo() {
     if (!contentWrapper.value) return null
 
@@ -762,6 +888,12 @@ export function useEpubReader(paneIndex) {
     if (displayModeWatcher) {
       displayModeWatcher()
       displayModeWatcher = null
+    }
+
+    // Remove wheel handler
+    if (wheelHandler && contentWrapper.value) {
+      contentWrapper.value.removeEventListener('wheel', wheelHandler)
+      wheelHandler = null
     }
 
     blobUrls.value.forEach(url => URL.revokeObjectURL(url))
