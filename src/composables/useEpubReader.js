@@ -38,6 +38,58 @@ export function useEpubReader(paneIndex) {
   let displayModeWatcher = null
   let wheelHandler = null
 
+  // Helper to find section index from href
+  function findSectionIndex(href) {
+    if (!href || !sections.value.length) return { index: -1, fragment: null }
+
+    // Remove fragment
+    const hashIndex = href.indexOf('#')
+    const path = hashIndex >= 0 ? href.substring(0, hashIndex) : href
+    const fragment = hashIndex >= 0 ? href.substring(hashIndex + 1) : null
+
+    // Normalize and get filename
+    const normalizePath = (p) => {
+      if (!p) return ''
+      return p.replace(/^\.?\.?\//, '').replace(/\/$/, '').toLowerCase()
+    }
+    const getFileName = (p) => {
+      if (!p) return ''
+      const parts = normalizePath(p).split('/')
+      return parts[parts.length - 1]
+    }
+
+    const targetPath = normalizePath(path)
+    const targetFile = getFileName(path)
+
+    console.log('[findSectionIndex] Looking for:', { targetPath, targetFile, fragment })
+
+    const linearSections = sections.value.filter(s => s.linear !== 'no')
+
+    for (let i = 0; i < linearSections.length; i++) {
+      const section = linearSections[i]
+      // foliate-js stores href in section.id, not section.href
+      const sectionHref = section.id || section.href || ''
+      const sectionPath = normalizePath(sectionHref)
+      const sectionFile = getFileName(sectionHref)
+
+      // Try multiple matching strategies
+      if (
+        sectionPath === targetPath ||
+        sectionFile === targetFile ||
+        sectionPath.endsWith(targetPath) ||
+        targetPath.endsWith(sectionPath) ||
+        (targetPath && sectionPath.includes(targetPath)) ||
+        (targetPath && targetPath.includes(sectionPath) && sectionPath.length > 0)
+      ) {
+        console.log('[findSectionIndex] Match found at index', i, ':', sectionHref)
+        return { index: i, fragment }
+      }
+    }
+
+    console.log('[findSectionIndex] No match found')
+    return { index: -1, fragment }
+  }
+
   // Process TOC to flat structure
   function processToc(toc) {
     if (!toc) return []
@@ -53,6 +105,7 @@ export function useEpubReader(paneIndex) {
       }
     }
     toc.forEach((item) => processItem(item))
+    console.log('[processToc] Processed TOC items:', result.map(i => ({ label: i.label, href: i.href })))
     return result
   }
 
@@ -395,10 +448,26 @@ export function useEpubReader(paneIndex) {
       await tempView.open(file)
       book.value = tempView.book
 
+      console.log('[openFile] Book object methods:', Object.keys(book.value))
+      console.log('[openFile] Book spine:', book.value.spine)
+      console.log('[openFile] Raw TOC:', book.value.toc)
+      if (book.value.toc && book.value.toc.length > 0) {
+        console.log('[openFile] First TOC item properties:', Object.keys(book.value.toc[0]))
+        console.log('[openFile] First TOC item:', JSON.stringify(book.value.toc[0]))
+      }
       const toc = processToc(book.value.toc)
       readerStore.setToc(paneIndex, toc)
 
       sections.value = book.value.sections || []
+      console.log('[openFile] Sections loaded:', sections.value.length)
+      if (sections.value.length > 0) {
+        console.log('[openFile] First section properties:', Object.keys(sections.value[0]))
+        console.log('[openFile] First 3 sections:', sections.value.slice(0, 3).map(s => ({
+          id: s.id,
+          href: s.href,
+          linear: s.linear,
+        })))
+      }
       const linearSections = sections.value.filter(s => s.linear !== 'no')
 
       // Create content wrapper
@@ -518,29 +587,26 @@ export function useEpubReader(paneIndex) {
   }
 
   function goTo(href) {
-    if (!contentWrapper.value) return
+    if (!isReady.value) {
+      console.warn('[goTo] Reader not ready yet')
+      return
+    }
+
+    if (!contentWrapper.value) {
+      console.warn('[goTo] No contentWrapper')
+      return
+    }
+
+    console.log('[goTo] Navigating to:', href)
+    console.log('[goTo] sections.value length:', sections.value.length)
 
     const isPageMode = settingsStore.epubDisplayModes[paneIndex] === 'page'
     const container = isPageMode ? columnWrapper.value : contentWrapper.value
 
-    if (!container) return
-
-    // Parse href - may contain fragment identifier (#)
-    const hashIndex = href.indexOf('#')
-    const path = hashIndex >= 0 ? href.substring(0, hashIndex) : href
-    const fragment = hashIndex >= 0 ? href.substring(hashIndex + 1) : null
-
-    // Normalize path for comparison (remove leading ./ or /)
-    const normalizePath = (p) => {
-      if (!p) return ''
-      return p.replace(/^\.?\//, '').replace(/\/$/, '').toLowerCase()
+    if (!container) {
+      console.warn('[goTo] No container')
+      return
     }
-
-    const normalizedPath = normalizePath(path)
-    const normalizedHref = normalizePath(href)
-
-    // Get linear sections (same order as displayed)
-    const linearSections = sections.value.filter(s => s.linear !== 'no')
 
     // Helper function to scroll to element in scroll mode
     const scrollToElement = (element) => {
@@ -561,85 +627,77 @@ export function useEpubReader(paneIndex) {
       })
     }
 
-    // Find matching section
-    for (let i = 0; i < linearSections.length; i++) {
-      const section = linearSections[i]
-      const sectionHref = normalizePath(section.href || '')
-      const sectionId = (section.id || '').toLowerCase()
+    // Use helper to find section
+    const { index: sectionIndex, fragment } = findSectionIndex(href)
+    console.log('[goTo] Found section index:', sectionIndex, 'fragment:', fragment)
 
-      // Check if href matches (with various path formats)
-      const hrefMatches =
-        sectionHref === normalizedPath ||
-        sectionHref === normalizedHref ||
-        sectionHref.endsWith('/' + normalizedPath) ||
-        normalizedPath.endsWith('/' + sectionHref) ||
-        sectionHref.endsWith(normalizedPath) ||
-        normalizedPath.endsWith(sectionHref) ||
-        (normalizedPath && sectionHref.includes(normalizedPath)) ||
-        (normalizedPath && normalizedPath.includes(sectionHref) && sectionHref.length > 0) ||
-        sectionId === normalizedHref ||
-        sectionId === normalizedPath
+    if (sectionIndex >= 0) {
+      const sectionEl = container.querySelector(`[data-section-index="${sectionIndex}"]`)
+      if (sectionEl) {
+        const isLoaded = sectionEl.dataset.loaded === 'true'
+        console.log('[goTo] Section element found, loaded:', isLoaded)
 
-      if (hrefMatches) {
-        const sectionEl = container.querySelector(`[data-section-index="${i}"]`)
-        if (sectionEl) {
-          // Ensure section is loaded first
-          const isLoaded = sectionEl.dataset.loaded === 'true'
+        const navigateToSection = () => {
+          const loadedEl = container.querySelector(`[data-section-index="${sectionIndex}"]`)
+          if (!loadedEl) {
+            console.warn('[goTo] Could not find loaded section element')
+            return
+          }
 
-          const navigateToSection = () => {
-            const loadedEl = container.querySelector(`[data-section-index="${i}"]`)
-            if (!loadedEl) return
-
-            // If there's a fragment, try to find the element within the section
-            let targetElement = loadedEl
-            if (fragment) {
-              // Try various selectors for fragment
-              try {
-                const fragmentEl =
-                  loadedEl.querySelector(`#${CSS.escape(fragment)}`) ||
-                  loadedEl.querySelector(`[name="${fragment}"]`) ||
-                  loadedEl.querySelector(`[id="${fragment}"]`)
-                if (fragmentEl) {
-                  targetElement = fragmentEl
-                }
-              } catch (e) {
-                // CSS.escape might fail with invalid selectors
+          // If there's a fragment, try to find the element within the section
+          let targetElement = loadedEl
+          if (fragment) {
+            try {
+              const fragmentEl =
+                loadedEl.querySelector(`#${CSS.escape(fragment)}`) ||
+                loadedEl.querySelector(`[name="${fragment}"]`) ||
+                loadedEl.querySelector(`[id="${fragment}"]`)
+              if (fragmentEl) {
+                targetElement = fragmentEl
+                console.log('[goTo] Found fragment element')
               }
+            } catch (e) {
+              // CSS.escape might fail with invalid selectors
             }
-
-            if (isPageMode) {
-              // Page mode: calculate which page contains this element
-              navigateToElement(targetElement)
-            } else {
-              // Scroll mode: use custom scroll for reliability
-              scrollToElement(targetElement)
-            }
-            savePosition()
           }
 
-          if (!isLoaded) {
-            loadSectionsInRange(i, i + BUFFER_SECTIONS).then(() => {
-              // Small delay to ensure DOM is updated
-              setTimeout(navigateToSection, 50)
-            })
+          if (isPageMode) {
+            navigateToElement(targetElement)
           } else {
-            navigateToSection()
+            scrollToElement(targetElement)
           }
-          return
+          console.log('[goTo] Navigation complete')
+          savePosition()
         }
+
+        if (!isLoaded) {
+          console.log('[goTo] Loading section...')
+          loadSectionsInRange(sectionIndex, sectionIndex + BUFFER_SECTIONS).then(() => {
+            setTimeout(navigateToSection, 50)
+          })
+        } else {
+          navigateToSection()
+        }
+        return
+      } else {
+        console.warn('[goTo] Section element not found in DOM')
       }
     }
 
-    // Fallback: try to find element by ID/name directly in the container
-    const searchId = fragment || normalizedPath || href
+    console.warn('[goTo] No matching section found for href:', href)
+
+    // Fallback: try to find element by ID/name directly in all loaded sections
+    const hashIndex = href.indexOf('#')
+    const searchId = hashIndex >= 0 ? href.substring(hashIndex + 1) : href
     if (searchId) {
-      // Search across all loaded sections
+      console.log('[goTo] Trying fallback search for:', searchId)
       try {
         const element =
           container.querySelector(`#${CSS.escape(searchId)}`) ||
           container.querySelector(`[name="${searchId}"]`) ||
           container.querySelector(`[id="${searchId}"]`)
         if (element) {
+          console.log('[goTo] Found element via fallback')
           if (isPageMode) {
             navigateToElement(element)
           } else {

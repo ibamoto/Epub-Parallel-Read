@@ -259,7 +259,14 @@ async function openFile(file) {
 
 // Handle navigation
 function handleNavigate(href) {
-  activeReader.value?.goTo(href);
+  console.log('[ReaderPane] handleNavigate called with:', href)
+  console.log('[ReaderPane] activeReader:', activeReader.value)
+  console.log('[ReaderPane] fileType:', readerStore.fileTypes[props.paneIndex])
+  if (activeReader.value?.goTo) {
+    activeReader.value.goTo(href);
+  } else {
+    console.warn('[ReaderPane] No goTo method available')
+  }
 }
 
 function handleNext() {
