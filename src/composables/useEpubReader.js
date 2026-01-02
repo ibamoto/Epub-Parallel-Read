@@ -500,7 +500,17 @@ export function useEpubReader(paneIndex) {
     if (!container) return
 
     // Parse href - may contain fragment identifier (#)
-    const [path, fragment] = href.split('#')
+    const hashIndex = href.indexOf('#')
+    const path = hashIndex >= 0 ? href.substring(0, hashIndex) : href
+    const fragment = hashIndex >= 0 ? href.substring(hashIndex + 1) : null
+
+    // Normalize path for comparison (remove leading ./ or /)
+    const normalizePath = (p) => {
+      if (!p) return ''
+      return p.replace(/^\.?\//, '').replace(/\/$/, '')
+    }
+
+    const normalizedPath = normalizePath(path)
 
     // Get linear sections (same order as displayed)
     const linearSections = sections.value.filter(s => s.linear !== 'no')
@@ -508,59 +518,70 @@ export function useEpubReader(paneIndex) {
     // Find matching section
     for (let i = 0; i < linearSections.length; i++) {
       const section = linearSections[i]
-      const sectionHref = section.href || ''
+      const sectionHref = normalizePath(section.href || '')
 
-      // Check if href matches (with or without fragment)
-      const hrefMatches = sectionHref === href ||
-        sectionHref === path ||
-        sectionHref.endsWith('/' + path) ||
-        path.endsWith('/' + sectionHref) ||
+      // Check if href matches (with various path formats)
+      const hrefMatches =
+        sectionHref === normalizedPath ||
+        sectionHref === normalizePath(href) ||
+        sectionHref.endsWith('/' + normalizedPath) ||
+        normalizedPath.endsWith('/' + sectionHref) ||
+        sectionHref.endsWith(normalizedPath) ||
+        normalizedPath.endsWith(sectionHref) ||
         section.id === href ||
-        section.id === path
+        section.id === path ||
+        section.id === normalizedPath
 
       if (hrefMatches) {
         const sectionEl = container.querySelector(`[data-section-index="${i}"]`)
         if (sectionEl) {
-          // If there's a fragment, try to find the element within the section
-          let targetElement = sectionEl
-          if (fragment) {
-            const fragmentEl = sectionEl.querySelector(`#${fragment}, [name="${fragment}"]`)
-            if (fragmentEl) {
-              targetElement = fragmentEl
-            }
-          }
+          // Ensure section is loaded first
+          const isLoaded = sectionEl.dataset.loaded === 'true'
 
-          if (isPageMode) {
-            // Page mode: calculate which page contains this element
-            navigateToElement(targetElement)
-          } else {
-            // Scroll mode: ensure section is loaded before scrolling
-            if (sectionEl.dataset.loaded === 'false') {
-              loadSectionsInRange(i, i + BUFFER_SECTIONS).then(() => {
-                const loadedEl = container.querySelector(`[data-section-index="${i}"]`)
-                if (loadedEl) {
-                  let target = loadedEl
-                  if (fragment) {
-                    const fragEl = loadedEl.querySelector(`#${fragment}, [name="${fragment}"]`)
-                    if (fragEl) target = fragEl
-                  }
-                  target.scrollIntoView({ behavior: 'smooth' })
-                }
-              })
+          const navigateToSection = () => {
+            const loadedEl = container.querySelector(`[data-section-index="${i}"]`)
+            if (!loadedEl) return
+
+            // If there's a fragment, try to find the element within the section
+            let targetElement = loadedEl
+            if (fragment) {
+              // Try various selectors for fragment
+              const fragmentEl =
+                loadedEl.querySelector(`#${CSS.escape(fragment)}`) ||
+                loadedEl.querySelector(`[name="${fragment}"]`) ||
+                loadedEl.querySelector(`[id="${fragment}"]`)
+              if (fragmentEl) {
+                targetElement = fragmentEl
+              }
+            }
+
+            if (isPageMode) {
+              // Page mode: calculate which page contains this element
+              navigateToElement(targetElement)
             } else {
               targetElement.scrollIntoView({ behavior: 'smooth' })
             }
+            savePosition()
           }
-          savePosition()
+
+          if (!isLoaded) {
+            loadSectionsInRange(i, i + BUFFER_SECTIONS).then(navigateToSection)
+          } else {
+            navigateToSection()
+          }
           return
         }
       }
     }
 
     // Fallback: try to find element by ID/name directly in the container
-    if (fragment || href) {
-      const searchId = fragment || href
-      const element = container.querySelector(`#${searchId}, [name="${searchId}"]`)
+    const searchId = fragment || normalizedPath || href
+    if (searchId) {
+      // Search across all loaded sections
+      const element =
+        container.querySelector(`#${CSS.escape(searchId)}`) ||
+        container.querySelector(`[name="${searchId}"]`) ||
+        container.querySelector(`[id="${searchId}"]`)
       if (element) {
         if (isPageMode) {
           navigateToElement(element)
@@ -673,7 +694,9 @@ export function useEpubReader(paneIndex) {
     if (!contentWrapper.value || !position) return
 
     setTimeout(() => {
-      if (settingsStore.epubDisplayModes[paneIndex] === 'page') {
+      const isPageMode = settingsStore.epubDisplayModes[paneIndex] === 'page'
+
+      if (isPageMode) {
         // Page mode: restore from page or ratio
         if (position.currentPage !== undefined && position.displayMode === 'page' && !position.switchingMode) {
           // Same mode, use page directly
