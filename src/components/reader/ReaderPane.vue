@@ -61,6 +61,24 @@
       <button @click="handlePrev">← 前へ</button>
       <button @click="handleNext">次へ →</button>
 
+      <!-- EPUB Display Mode Toggle -->
+      <div v-if="isEpub" class="display-mode-toggle">
+        <button
+          :class="{ active: currentDisplayMode === 'scroll' }"
+          @click="setDisplayMode('scroll')"
+          title="スクロールモード"
+        >
+          スクロール
+        </button>
+        <button
+          :class="{ active: currentDisplayMode === 'page' }"
+          @click="setDisplayMode('page')"
+          title="ページモード"
+        >
+          ページ
+        </button>
+      </div>
+
       <span v-if="fileInfo" class="file-info">{{ fileInfo }}</span>
     </div>
   </div>
@@ -123,6 +141,18 @@ const activeReader = computed(() => {
 const hasContent = computed(() => {
   return readerStore.books[props.paneIndex] !== null;
 });
+
+const isEpub = computed(() => {
+  return readerStore.fileTypes[props.paneIndex] === 'epub';
+});
+
+const currentDisplayMode = computed(() => {
+  return settingsStore.epubDisplayModes[props.paneIndex];
+});
+
+function setDisplayMode(mode) {
+  settingsStore.setEpubDisplayMode(props.paneIndex, mode);
+}
 
 const fileInfo = computed(() => {
   const name = readerStore.fileNames[props.paneIndex];
@@ -440,6 +470,39 @@ onUnmounted(() => {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+/* Display Mode Toggle */
+.display-mode-toggle {
+  display: flex;
+  margin-left: 0.5rem;
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  overflow: hidden;
+}
+
+.display-mode-toggle button {
+  padding: 0.35rem 0.6rem;
+  border: none;
+  border-radius: 0;
+  background: var(--bg-primary);
+  color: var(--text-secondary);
+  cursor: pointer;
+  font-size: 0.75rem;
+  transition: all 0.15s;
+}
+
+.display-mode-toggle button:not(:last-child) {
+  border-right: 1px solid var(--border-color);
+}
+
+.display-mode-toggle button:hover {
+  background: var(--bg-hover);
+}
+
+.display-mode-toggle button.active {
+  background: var(--accent-color);
+  color: white;
 }
 
 /* PDF specific styles */

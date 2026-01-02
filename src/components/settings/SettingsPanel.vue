@@ -49,29 +49,6 @@
             </div>
           </section>
 
-          <!-- EPUB Display Mode Section -->
-          <section class="settings-section">
-            <h4>EPUB表示モード</h4>
-
-            <div class="setting-item">
-              <label>モード</label>
-              <div class="btn-group">
-                <button
-                  :class="{ active: settingsStore.epubDisplayMode === 'scroll' }"
-                  @click="handleDisplayModeChange('scroll')"
-                >
-                  スクロール
-                </button>
-                <button
-                  :class="{ active: settingsStore.epubDisplayMode === 'page' }"
-                  @click="handleDisplayModeChange('page')"
-                >
-                  ページ
-                </button>
-              </div>
-            </div>
-          </section>
-
           <!-- Layout Section -->
           <section class="settings-section">
             <h4>レイアウト</h4>
@@ -263,12 +240,6 @@ function updateSetting(key) {
 // Handle theme change
 function handleThemeChange(themeValue) {
   settingsStore.setTheme(themeValue)
-  emit('settings-changed')
-}
-
-// Handle EPUB display mode change
-function handleDisplayModeChange(mode) {
-  settingsStore.setEpubDisplayMode(mode)
   emit('settings-changed')
 }
 

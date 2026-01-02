@@ -59,7 +59,7 @@ export function useEpubReader(paneIndex) {
   function generateContentStyles() {
     const colors = settingsStore.getThemeColors()
     const settings = settingsStore.paneSettings[paneIndex]
-    const isPageMode = settingsStore.epubDisplayMode === 'page'
+    const isPageMode = settingsStore.epubDisplayModes[paneIndex] === 'page'
     const fontFamily = settings.fontFamily === 'system-ui'
       ? 'system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen, Ubuntu, Cantarell, "Open Sans", "Helvetica Neue", sans-serif'
       : settings.fontFamily
@@ -169,7 +169,7 @@ export function useEpubReader(paneIndex) {
     if (!styleElement.value) return
     styleElement.value.textContent = generateContentStyles()
     // Recalculate pages when styles change in page mode
-    if (settingsStore.epubDisplayMode === 'page') {
+    if (settingsStore.epubDisplayModes[paneIndex] === 'page') {
       setTimeout(() => calculateTotalPages(), 50)
     }
   }
@@ -378,7 +378,7 @@ export function useEpubReader(paneIndex) {
       contentWrapper.value.className = `epub-content-${paneIndex}`
       containerRef.value.appendChild(contentWrapper.value)
 
-      const isPageMode = settingsStore.epubDisplayMode === 'page'
+      const isPageMode = settingsStore.epubDisplayModes[paneIndex] === 'page'
 
       // For page mode, create an inner column wrapper
       let sectionContainer
@@ -497,7 +497,7 @@ export function useEpubReader(paneIndex) {
   function next() {
     if (!contentWrapper.value) return
 
-    if (settingsStore.epubDisplayMode === 'page') {
+    if (settingsStore.epubDisplayModes[paneIndex] === 'page') {
       nextPage()
     } else {
       const viewportHeight = contentWrapper.value.clientHeight
@@ -509,7 +509,7 @@ export function useEpubReader(paneIndex) {
   function prev() {
     if (!contentWrapper.value) return
 
-    if (settingsStore.epubDisplayMode === 'page') {
+    if (settingsStore.epubDisplayModes[paneIndex] === 'page') {
       prevPage()
     } else {
       const viewportHeight = contentWrapper.value.clientHeight
@@ -521,7 +521,7 @@ export function useEpubReader(paneIndex) {
   function scrollBy(distance) {
     if (!contentWrapper.value) return
 
-    if (settingsStore.epubDisplayMode === 'page') {
+    if (settingsStore.epubDisplayModes[paneIndex] === 'page') {
       // In page mode, interpret scroll distance as page navigation
       if (distance > 0) {
         nextPage()
@@ -537,7 +537,7 @@ export function useEpubReader(paneIndex) {
   function savePosition() {
     if (!contentWrapper.value) return
 
-    if (settingsStore.epubDisplayMode === 'page') {
+    if (settingsStore.epubDisplayModes[paneIndex] === 'page') {
       // Page mode: save page ratio
       const pageRatio = totalPages.value > 1
         ? currentPage.value / (totalPages.value - 1)
@@ -572,7 +572,7 @@ export function useEpubReader(paneIndex) {
     if (!contentWrapper.value || !position) return
 
     setTimeout(() => {
-      if (settingsStore.epubDisplayMode === 'page') {
+      if (settingsStore.epubDisplayModes[paneIndex] === 'page') {
         // Page mode: restore from page or ratio
         if (position.currentPage !== undefined && position.displayMode === 'page') {
           goToPage(position.currentPage)
@@ -593,7 +593,7 @@ export function useEpubReader(paneIndex) {
   }
 
   function resize() {
-    if (settingsStore.epubDisplayMode === 'page') {
+    if (settingsStore.epubDisplayModes[paneIndex] === 'page') {
       // Recalculate pages on resize
       calculateTotalPages()
     }
@@ -615,7 +615,7 @@ export function useEpubReader(paneIndex) {
   function getScrollInfo() {
     if (!contentWrapper.value) return null
 
-    if (settingsStore.epubDisplayMode === 'page') {
+    if (settingsStore.epubDisplayModes[paneIndex] === 'page') {
       // Page mode: return page-based scroll info
       const pageRatio = totalPages.value > 1
         ? currentPage.value / (totalPages.value - 1)
@@ -645,7 +645,7 @@ export function useEpubReader(paneIndex) {
   function setScrollByRatio(ratio) {
     if (!contentWrapper.value) return
 
-    if (settingsStore.epubDisplayMode === 'page') {
+    if (settingsStore.epubDisplayModes[paneIndex] === 'page') {
       // Page mode: convert ratio to page
       const targetPage = Math.round(ratio * (totalPages.value - 1))
       if (targetPage !== currentPage.value) {
@@ -667,7 +667,7 @@ export function useEpubReader(paneIndex) {
     }
 
     displayModeWatcher = watch(
-      () => settingsStore.epubDisplayMode,
+      () => settingsStore.epubDisplayModes[paneIndex],
       async (newMode, oldMode) => {
         if (!isReady.value || !book.value || newMode === oldMode) return
 
