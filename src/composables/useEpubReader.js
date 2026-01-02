@@ -61,8 +61,6 @@ export function useEpubReader(paneIndex) {
     const targetPath = normalizePath(path)
     const targetFile = getFileName(path)
 
-    console.log('[findSectionIndex] Looking for:', { targetPath, targetFile, fragment })
-
     const linearSections = sections.value.filter(s => s.linear !== 'no')
 
     for (let i = 0; i < linearSections.length; i++) {
@@ -81,12 +79,10 @@ export function useEpubReader(paneIndex) {
         (targetPath && sectionPath.includes(targetPath)) ||
         (targetPath && targetPath.includes(sectionPath) && sectionPath.length > 0)
       ) {
-        console.log('[findSectionIndex] Match found at index', i, ':', sectionHref)
         return { index: i, fragment }
       }
     }
 
-    console.log('[findSectionIndex] No match found')
     return { index: -1, fragment }
   }
 
@@ -105,7 +101,6 @@ export function useEpubReader(paneIndex) {
       }
     }
     toc.forEach((item) => processItem(item))
-    console.log('[processToc] Processed TOC items:', result.map(i => ({ label: i.label, href: i.href })))
     return result
   }
 
@@ -448,26 +443,10 @@ export function useEpubReader(paneIndex) {
       await tempView.open(file)
       book.value = tempView.book
 
-      console.log('[openFile] Book object methods:', Object.keys(book.value))
-      console.log('[openFile] Book spine:', book.value.spine)
-      console.log('[openFile] Raw TOC:', book.value.toc)
-      if (book.value.toc && book.value.toc.length > 0) {
-        console.log('[openFile] First TOC item properties:', Object.keys(book.value.toc[0]))
-        console.log('[openFile] First TOC item:', JSON.stringify(book.value.toc[0]))
-      }
       const toc = processToc(book.value.toc)
       readerStore.setToc(paneIndex, toc)
 
       sections.value = book.value.sections || []
-      console.log('[openFile] Sections loaded:', sections.value.length)
-      if (sections.value.length > 0) {
-        console.log('[openFile] First section properties:', Object.keys(sections.value[0]))
-        console.log('[openFile] First 3 sections:', sections.value.slice(0, 3).map(s => ({
-          id: s.id,
-          href: s.href,
-          linear: s.linear,
-        })))
-      }
       const linearSections = sections.value.filter(s => s.linear !== 'no')
 
       // Create content wrapper
@@ -587,26 +566,12 @@ export function useEpubReader(paneIndex) {
   }
 
   function goTo(href) {
-    if (!isReady.value) {
-      console.warn('[goTo] Reader not ready yet')
-      return
-    }
-
-    if (!contentWrapper.value) {
-      console.warn('[goTo] No contentWrapper')
-      return
-    }
-
-    console.log('[goTo] Navigating to:', href)
-    console.log('[goTo] sections.value length:', sections.value.length)
+    if (!isReady.value || !contentWrapper.value) return
 
     const isPageMode = settingsStore.epubDisplayModes[paneIndex] === 'page'
     const container = isPageMode ? columnWrapper.value : contentWrapper.value
 
-    if (!container) {
-      console.warn('[goTo] No container')
-      return
-    }
+    if (!container) return
 
     // Helper function to scroll to element in scroll mode
     const scrollToElement = (element) => {
@@ -629,20 +594,15 @@ export function useEpubReader(paneIndex) {
 
     // Use helper to find section
     const { index: sectionIndex, fragment } = findSectionIndex(href)
-    console.log('[goTo] Found section index:', sectionIndex, 'fragment:', fragment)
 
     if (sectionIndex >= 0) {
       const sectionEl = container.querySelector(`[data-section-index="${sectionIndex}"]`)
       if (sectionEl) {
         const isLoaded = sectionEl.dataset.loaded === 'true'
-        console.log('[goTo] Section element found, loaded:', isLoaded)
 
         const navigateToSection = () => {
           const loadedEl = container.querySelector(`[data-section-index="${sectionIndex}"]`)
-          if (!loadedEl) {
-            console.warn('[goTo] Could not find loaded section element')
-            return
-          }
+          if (!loadedEl) return
 
           // If there's a fragment, try to find the element within the section
           let targetElement = loadedEl
@@ -654,7 +614,6 @@ export function useEpubReader(paneIndex) {
                 loadedEl.querySelector(`[id="${fragment}"]`)
               if (fragmentEl) {
                 targetElement = fragmentEl
-                console.log('[goTo] Found fragment element')
               }
             } catch (e) {
               // CSS.escape might fail with invalid selectors
@@ -666,12 +625,10 @@ export function useEpubReader(paneIndex) {
           } else {
             scrollToElement(targetElement)
           }
-          console.log('[goTo] Navigation complete')
           savePosition()
         }
 
         if (!isLoaded) {
-          console.log('[goTo] Loading section...')
           loadSectionsInRange(sectionIndex, sectionIndex + BUFFER_SECTIONS).then(() => {
             setTimeout(navigateToSection, 50)
           })
@@ -679,25 +636,19 @@ export function useEpubReader(paneIndex) {
           navigateToSection()
         }
         return
-      } else {
-        console.warn('[goTo] Section element not found in DOM')
       }
     }
-
-    console.warn('[goTo] No matching section found for href:', href)
 
     // Fallback: try to find element by ID/name directly in all loaded sections
     const hashIndex = href.indexOf('#')
     const searchId = hashIndex >= 0 ? href.substring(hashIndex + 1) : href
     if (searchId) {
-      console.log('[goTo] Trying fallback search for:', searchId)
       try {
         const element =
           container.querySelector(`#${CSS.escape(searchId)}`) ||
           container.querySelector(`[name="${searchId}"]`) ||
           container.querySelector(`[id="${searchId}"]`)
         if (element) {
-          console.log('[goTo] Found element via fallback')
           if (isPageMode) {
             navigateToElement(element)
           } else {
