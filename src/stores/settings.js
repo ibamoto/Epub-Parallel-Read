@@ -31,8 +31,8 @@ export const useSettingsStore = defineStore('settings', () => {
   const showControls = ref(true)
   const syncSensitivity = ref(1.0)
 
-  // EPUB display mode: 'scroll' | 'page'
-  const epubDisplayMode = ref('scroll')
+  // EPUB display mode per pane: 'scroll' | 'page'
+  const epubDisplayModes = ref(['scroll', 'scroll'])
 
   // Per-pane scroll amount (in pixels for EPUB)
   const scrollAmounts = ref([100, 100])
@@ -79,7 +79,7 @@ export const useSettingsStore = defineStore('settings', () => {
         syncMode.value = parsed.syncMode ?? false
         showControls.value = parsed.showControls ?? true
         syncSensitivity.value = parsed.syncSensitivity ?? 1.0
-        epubDisplayMode.value = parsed.epubDisplayMode ?? 'scroll'
+        epubDisplayModes.value = parsed.epubDisplayModes ?? ['scroll', 'scroll']
         theme.value = parsed.theme ?? 'light'
         scrollAmounts.value = parsed.scrollAmounts ?? [100, 100]
         pdfPageAmounts.value = parsed.pdfPageAmounts ?? [1, 1]
@@ -110,7 +110,7 @@ export const useSettingsStore = defineStore('settings', () => {
         syncMode: syncMode.value,
         showControls: showControls.value,
         syncSensitivity: syncSensitivity.value,
-        epubDisplayMode: epubDisplayMode.value,
+        epubDisplayModes: epubDisplayModes.value,
         theme: theme.value,
         customColors: customColors.value,
         paneSettings: paneSettings.value,
@@ -182,9 +182,10 @@ export const useSettingsStore = defineStore('settings', () => {
     saveSettings()
   }
 
-  // Set EPUB display mode
-  function setEpubDisplayMode(mode) {
-    epubDisplayMode.value = mode
+  // Set EPUB display mode for a specific pane
+  function setEpubDisplayMode(paneIndex, mode) {
+    epubDisplayModes.value = [...epubDisplayModes.value]
+    epubDisplayModes.value[paneIndex] = mode
     saveSettings()
   }
 
@@ -215,7 +216,7 @@ export const useSettingsStore = defineStore('settings', () => {
   }
 
   // Auto-save on changes
-  watch([isDarkMode, syncMode, showControls, syncSensitivity, epubDisplayMode, theme, customColors, paneSettings, scrollAmounts, pdfPageAmounts, useWheelAmount, showProgressBar], () => {
+  watch([isDarkMode, syncMode, showControls, syncSensitivity, epubDisplayModes, theme, customColors, paneSettings, scrollAmounts, pdfPageAmounts, useWheelAmount, showProgressBar], () => {
     saveSettings()
   }, { deep: true })
 
@@ -225,7 +226,7 @@ export const useSettingsStore = defineStore('settings', () => {
     syncMode,
     showControls,
     syncSensitivity,
-    epubDisplayMode,
+    epubDisplayModes,
     theme,
     customColors,
     paneSettings,
