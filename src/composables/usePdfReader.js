@@ -21,13 +21,24 @@ export function usePdfReader(paneIndex) {
 
   // Single canvas for current page display
   let pageCanvas = null
+  let isRendering = false
+  let pendingRender = null
 
   // Render the current page to canvas
   async function renderCurrentPage() {
     if (!pdf.value || !pageCanvas) return
 
+    // If already rendering, queue this render
+    if (isRendering) {
+      pendingRender = currentPage.value
+      return
+    }
+
+    isRendering = true
+
     try {
-      const page = await pdf.value.getPage(currentPage.value)
+      const pageToRender = currentPage.value
+      const page = await pdf.value.getPage(pageToRender)
       const viewport = page.getViewport({ scale: scale.value })
 
       pageCanvas.width = viewport.width
@@ -46,6 +57,18 @@ export function usePdfReader(paneIndex) {
       }).promise
     } catch (error) {
       console.error(`[PDF] Error rendering page ${currentPage.value}:`, error)
+    } finally {
+      isRendering = false
+
+      // If there's a pending render, execute it
+      if (pendingRender !== null && pendingRender !== currentPage.value) {
+        const nextPage = pendingRender
+        pendingRender = null
+        currentPage.value = nextPage
+        await renderCurrentPage()
+      } else {
+        pendingRender = null
+      }
     }
   }
 
@@ -310,14 +333,11 @@ export function usePdfReader(paneIndex) {
     }
   }
 
-  // Set scroll position by ratio - for PDF, convert to page number
+  // Set scroll position by ratio - disabled for PDF
+  // PDF navigation should be independent, using next/prev buttons for sync
   function setScrollByRatio(ratio) {
-    if (!totalPages.value) return
-    // Convert scroll ratio to page number
-    const targetPage = Math.max(1, Math.min(totalPages.value, Math.round(ratio * (totalPages.value - 1)) + 1))
-    if (targetPage !== currentPage.value) {
-      goToPage(targetPage)
-    }
+    // Do nothing - PDF doesn't sync by scroll ratio
+    // Sync is handled by explicit navigation (next/prev buttons)
   }
 
   // Cleanup
