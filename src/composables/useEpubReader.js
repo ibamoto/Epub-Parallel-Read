@@ -363,14 +363,13 @@ export function useEpubReader(paneIndex) {
 
   // Load remaining sections progressively for page mode (non-blocking)
   async function loadRemainingSectionsProgressively(linearSections, sectionContainer, startIndex) {
-    const BATCH_SIZE = 3 // Load N sections per batch
-    const BATCH_DELAY = 50 // ms between batches
+    const BATCH_SIZE = 5 // Load N sections per batch
 
     for (let i = startIndex; i < linearSections.length; i += BATCH_SIZE) {
-      // Yield to UI thread between batches
-      await yieldToUI()
+      // Check if cleanup was called
+      if (!book.value || !sectionContainer) return
 
-      // Load a batch of sections
+      // Load a batch of sections in parallel
       const batchEnd = Math.min(i + BATCH_SIZE, linearSections.length)
       const batchPromises = []
 
@@ -390,13 +389,13 @@ export function useEpubReader(paneIndex) {
         await Promise.all(batchPromises)
       }
 
+      // Yield to UI thread after each batch to keep responsive
+      await yieldToUI()
+
       // Recalculate pages after each batch
       if (settingsStore.epubDisplayModes[paneIndex] === 'page') {
         calculateTotalPages()
       }
-
-      // Small delay to allow UI updates
-      await new Promise(resolve => setTimeout(resolve, BATCH_DELAY))
     }
   }
 
