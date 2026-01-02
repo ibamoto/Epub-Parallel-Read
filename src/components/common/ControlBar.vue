@@ -62,7 +62,12 @@
         >
           <span>━</span>
         </button>
-        <div class="scroll-amount-control" v-if="readerStore.fileTypes[0] === 'epub'" title="左ペインのスクロール量 (px)">
+        <div
+          class="scroll-amount-control"
+          :class="{ disabled: isPageMode(0) }"
+          v-if="readerStore.fileTypes[0] === 'epub'"
+          :title="isPageMode(0) ? 'ページモードでは無効（1ページずつ移動）' : '左ペインのスクロール量 (px)'"
+        >
           <label>⇅</label>
           <input
             type="number"
@@ -71,6 +76,7 @@
             min="10"
             max="1000"
             step="10"
+            :disabled="isPageMode(0)"
           />
         </div>
         <div class="scroll-amount-control" v-if="readerStore.fileTypes[0] === 'pdf'" title="左ペインのページ数">
@@ -110,7 +116,12 @@
           />
           <label>📄</label>
         </div>
-        <div class="scroll-amount-control" v-if="readerStore.fileTypes[1] === 'epub'" title="右ペインのスクロール量 (px)">
+        <div
+          class="scroll-amount-control"
+          :class="{ disabled: isPageMode(1) }"
+          v-if="readerStore.fileTypes[1] === 'epub'"
+          :title="isPageMode(1) ? 'ページモードでは無効（1ページずつ移動）' : '右ペインのスクロール量 (px)'"
+        >
           <input
             type="number"
             :value="settingsStore.scrollAmounts[1]"
@@ -118,6 +129,7 @@
             min="10"
             max="1000"
             step="10"
+            :disabled="isPageMode(1)"
           />
           <label>⇅</label>
         </div>
@@ -281,6 +293,11 @@ function updatePdfPageAmount(paneIndex, event) {
 // Toggle progress bar
 function toggleProgressBar(paneIndex) {
   settingsStore.setShowProgressBar(paneIndex, !settingsStore.showProgressBar[paneIndex])
+}
+
+// Check if EPUB is in page mode
+function isPageMode(paneIndex) {
+  return readerStore.fileTypes[paneIndex] === 'epub' && settingsStore.epubDisplayModes[paneIndex] === 'page'
 }
 </script>
 
@@ -483,6 +500,20 @@ function toggleProgressBar(paneIndex) {
 
 .scroll-amount-control input[type=number] {
   -moz-appearance: textfield;
+}
+
+.scroll-amount-control.disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.scroll-amount-control.disabled input {
+  cursor: not-allowed;
+  background: var(--bg-hover);
+}
+
+.scroll-amount-control.disabled label {
+  cursor: not-allowed;
 }
 
 .scroll-btn {
