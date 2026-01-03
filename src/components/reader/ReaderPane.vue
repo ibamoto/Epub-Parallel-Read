@@ -33,7 +33,7 @@
           <div class="drop-icon">📚</div>
           <p>ファイルをドラッグ＆ドロップ</p>
           <p class="hint">または上のボタンから選択</p>
-          <p class="formats">対応形式: EPUB, PDF, Markdown, URL</p>
+          <p class="formats">対応形式: EPUB, PDF, Markdown, HTML, URL</p>
         </div>
 
         <!-- Reader View -->
@@ -156,7 +156,7 @@ function handleScroll() {
   updateScrollProgress();
 }
 
-// Update scroll progress for EPUB, Markdown, and URL
+// Update scroll progress for EPUB, Markdown, and URL/HTML
 function updateScrollProgress() {
   const fileType = readerStore.fileTypes[props.paneIndex];
   let scrollInfo = null;
@@ -165,7 +165,7 @@ function updateScrollProgress() {
     scrollInfo = epubReader.getScrollInfo?.();
   } else if (fileType === "markdown") {
     scrollInfo = markdownReader.getScrollInfo?.();
-  } else if (fileType === "url") {
+  } else if (fileType === "url" || fileType === "html") {
     scrollInfo = webReader.getScrollInfo?.();
   }
 
@@ -186,7 +186,7 @@ const activeReader = computed(() => {
   if (fileType === "epub") return epubReader;
   if (fileType === "pdf") return pdfReader;
   if (fileType === "markdown") return markdownReader;
-  if (fileType === "url") return webReader;
+  if (fileType === "url" || fileType === "html") return webReader;
   return null;
 });
 
@@ -199,7 +199,8 @@ const isEpub = computed(() => {
 });
 
 const isUrlMode = computed(() => {
-  return readerStore.fileTypes[props.paneIndex] === "url";
+  const fileType = readerStore.fileTypes[props.paneIndex];
+  return fileType === "url" || fileType === "html";
 });
 
 const urlFontSize = computed(() => {
@@ -225,7 +226,7 @@ function handleProgressClick(event) {
   } else if (type === "markdown") {
     markdownReader.setScrollByRatio(ratio);
     scrollProgress.value = ratio;
-  } else if (type === "url") {
+  } else if (type === "url" || type === "html") {
     webReader.setScrollByRatio(ratio);
     const scrollInfo = webReader.getScrollInfo?.();
     if (scrollInfo && typeof scrollInfo.scrollRatio === "number") {
@@ -259,8 +260,8 @@ const progressPercent = computed(() => {
     if (total <= 1) return 100;
     return ((current - 1) / (total - 1)) * 100;
   }
-  // For EPUB, Markdown, and URL, use scroll progress
-  if (type === "epub" || type === "markdown" || type === "url") {
+  // For EPUB, Markdown, HTML, and URL, use scroll progress
+  if (type === "epub" || type === "markdown" || type === "html" || type === "url") {
     const scrollInfo = activeReader.value?.getScrollInfo?.();
     if (scrollInfo && typeof scrollInfo.scrollRatio === "number") {
       return scrollInfo.scrollRatio * 100;
@@ -343,6 +344,14 @@ async function openFile(file) {
     await pdfReader.openFile(file);
   } else if (extension === "md" || extension === "markdown") {
     await markdownReader.openFile(file);
+  } else if (extension === "html" || extension === "htm") {
+    // Open HTML file via WebReader using Blob URL
+    const blob = new Blob([await file.arrayBuffer()], { type: "text/html" });
+    const blobUrl = URL.createObjectURL(blob);
+    await webReader.openUrl(blobUrl);
+    // Override file type and name to 'html' instead of 'url'
+    readerStore.setBook(props.paneIndex, { url: blobUrl, fileName: file.name }, "html");
+    readerStore.setFileName(props.paneIndex, file.name);
   } else {
     // Try to open as URL if it looks like a URL
     const fileName = file.name.toLowerCase();
@@ -369,7 +378,7 @@ async function openFile(file) {
     }
     readerStore.setError(
       props.paneIndex,
-      "対応していないファイル形式です。EPUB、PDF、Markdown、またはURLを選択してください。"
+      "対応していないファイル形式です。EPUB、PDF、Markdown、HTML、またはURLを選択してください。"
     );
   }
 }
@@ -485,26 +494,26 @@ defineExpose({
     if (type === "epub") epubReader.next?.();
     else if (type === "pdf") pdfReader.next?.();
     else if (type === "markdown") markdownReader.next?.();
-    else if (type === "url") webReader.next?.();
+    else if (type === "url" || type === "html") webReader.next?.();
   },
   prev: () => {
     const type = readerStore.fileTypes[props.paneIndex];
     if (type === "epub") epubReader.prev?.();
     else if (type === "pdf") pdfReader.prev?.();
     else if (type === "markdown") markdownReader.prev?.();
-    else if (type === "url") webReader.prev?.();
+    else if (type === "url" || type === "html") webReader.prev?.();
   },
   scrollBy: (distance) => {
     const type = readerStore.fileTypes[props.paneIndex];
     if (type === "epub") epubReader.scrollBy?.(distance);
     else if (type === "markdown") markdownReader.scrollBy?.(distance);
-    else if (type === "url") webReader.scrollBy?.(distance);
+    else if (type === "url" || type === "html") webReader.scrollBy?.(distance);
   },
   calculateScrollDistance: () => {
     const type = readerStore.fileTypes[props.paneIndex];
     if (type === "epub") return epubReader.calculateScrollDistance?.();
     else if (type === "markdown") return markdownReader.calculateScrollDistance?.();
-    else if (type === "url") return webReader.calculateScrollDistance?.();
+    else if (type === "url" || type === "html") return webReader.calculateScrollDistance?.();
     return 100; // default
   },
   pageBy: (pages) => pdfReader.goToPage?.(pdfReader.currentPage.value + pages),
