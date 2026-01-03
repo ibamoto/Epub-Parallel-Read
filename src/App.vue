@@ -46,22 +46,11 @@
         <span v-else>次へ →</span>
       </button>
 
-      <!-- Progress bars for each pane -->
-      <div class="unified-progress-container">
-        <div class="progress-item" v-if="settingsStore.showProgressBar[0]">
-          <span class="progress-label">左</span>
-          <div class="progress-bar" @click="handleProgressClick(0, $event)" ref="progressBar0">
-            <div class="progress-fill" :style="{ width: progressPercent0 + '%' }"></div>
-          </div>
-          <span class="progress-text">{{ Math.round(progressPercent0) }}%</span>
-        </div>
-        <div class="progress-item" v-if="settingsStore.showProgressBar[1]">
-          <span class="progress-label">右</span>
-          <div class="progress-bar" @click="handleProgressClick(1, $event)" ref="progressBar1">
-            <div class="progress-fill" :style="{ width: progressPercent1 + '%' }"></div>
-          </div>
-          <span class="progress-text">{{ Math.round(progressPercent1) }}%</span>
-        </div>
+      <!-- File info -->
+      <div class="unified-file-info">
+        <span v-if="readerStore.fileNames[0]" class="file-name left">{{ readerStore.fileNames[0] }}</span>
+        <span class="separator">|</span>
+        <span v-if="readerStore.fileNames[1]" class="file-name right">{{ readerStore.fileNames[1] }}</span>
       </div>
     </div>
 
@@ -99,8 +88,6 @@ const reader2 = ref(null)
 const globalError = ref('')
 const isResizing = ref(false)
 const showSettings = ref(false)
-const progressBar0 = ref(null)
-const progressBar1 = ref(null)
 let isSyncing = false
 let syncTimeout = null
 let keyboardNavLock = false  // Lock to prevent scroll sync during keyboard navigation
@@ -125,27 +112,6 @@ const bothUrlMode = computed(() => {
   return readerStore.fileTypes[0] === 'url' && readerStore.fileTypes[1] === 'url'
 })
 
-// Progress percentages for each pane
-const progressPercent0 = computed(() => {
-  const type = readerStore.fileTypes[0]
-  if (!type) return 0
-  const scrollInfo = reader1.value?.getScrollInfo?.()
-  if (scrollInfo && typeof scrollInfo.scrollRatio === 'number') {
-    return scrollInfo.scrollRatio * 100
-  }
-  return 0
-})
-
-const progressPercent1 = computed(() => {
-  const type = readerStore.fileTypes[1]
-  if (!type) return 0
-  const scrollInfo = reader2.value?.getScrollInfo?.()
-  if (scrollInfo && typeof scrollInfo.scrollRatio === 'number') {
-    return scrollInfo.scrollRatio * 100
-  }
-  return 0
-})
-
 // Unified navigation handlers
 function handleUnifiedPrev() {
   keyboardNavLock = true
@@ -163,19 +129,6 @@ function handleUnifiedNext() {
   setTimeout(() => {
     keyboardNavLock = false
   }, 600)
-}
-
-// Handle progress bar click in unified navigation
-function handleProgressClick(paneIndex, event) {
-  const progressBar = paneIndex === 0 ? progressBar0.value : progressBar1.value
-  if (!progressBar) return
-
-  const rect = progressBar.getBoundingClientRect()
-  const clickX = event.clientX - rect.left
-  const ratio = Math.max(0, Math.min(1, clickX / rect.width))
-
-  const reader = paneIndex === 0 ? reader1.value : reader2.value
-  reader?.setScrollByRatio?.(ratio)
 }
 
 // Initialize stores
@@ -1125,50 +1078,23 @@ body,
   border-color: var(--accent-color);
 }
 
-.unified-progress-container {
-  display: flex;
-  gap: 1rem;
-  align-items: center;
-}
-
-.unified-progress-container .progress-item {
+.unified-file-info {
   display: flex;
   align-items: center;
   gap: 0.5rem;
-}
-
-.unified-progress-container .progress-label {
   font-size: 0.75rem;
   color: var(--text-tertiary);
-  min-width: 1.5em;
 }
 
-.unified-progress-container .progress-bar {
-  width: 80px;
-  height: 6px;
-  background: var(--border-color);
-  border-radius: 3px;
+.unified-file-info .file-name {
+  max-width: 150px;
   overflow: hidden;
-  cursor: pointer;
-  transition: height 0.15s ease;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
-.unified-progress-container .progress-bar:hover {
-  height: 10px;
-}
-
-.unified-progress-container .progress-fill {
-  height: 100%;
-  background: var(--accent-color);
-  border-radius: 3px;
-  transition: width 0.15s ease-out;
-}
-
-.unified-progress-container .progress-text {
-  font-size: 0.75rem;
-  color: var(--text-tertiary);
-  min-width: 3em;
-  text-align: right;
+.unified-file-info .separator {
+  color: var(--border-color);
 }
 
 /* Responsive */
@@ -1184,11 +1110,6 @@ body,
   }
 
   .unified-navigation {
-    flex-direction: column;
-    gap: 0.5rem;
-  }
-
-  .unified-progress-container {
     flex-direction: column;
     gap: 0.5rem;
   }
