@@ -11,6 +11,7 @@ export function useWebReader(paneIndex) {
   let iframe = null
   let currentUrl = null
   let currentFontSize = 100
+  let currentScrollOffset = 0 // CSS transform scroll offset (fallback)
   let scrollInfoRequestId = 0
   const pendingScrollInfoRequests = new Map()
   let messageListener = null
@@ -68,6 +69,7 @@ export function useWebReader(paneIndex) {
 
       currentUrl = normalizedUrl
       currentFontSize = settingsStore.urlFontSizes[paneIndex] || 100
+      currentScrollOffset = 0 // Reset scroll offset for new URL
 
       // Setup container
       setupContainer()
@@ -274,7 +276,7 @@ export function useWebReader(paneIndex) {
       }
     }
 
-    // クロスオリジンの場合はpostMessageを使用
+    // クロスオリジンの場合はpostMessageを使用し、フォールバックも適用
     // content.jsでPARALLEL_READ_SCROLLメッセージを処理
     try {
       iframe.contentWindow.postMessage({
@@ -286,6 +288,9 @@ export function useWebReader(paneIndex) {
     } catch (postError) {
       console.error('WebReader.next: postMessage failed:', postError)
     }
+
+    // 常にCSS transformフォールバックも適用（content.jsが動作しない場合のため）
+    scrollByFallback(scrollAmount)
   }
 
   /**
@@ -332,7 +337,7 @@ export function useWebReader(paneIndex) {
       }
     }
 
-    // クロスオリジンの場合はpostMessageを使用
+    // クロスオリジンの場合はpostMessageを使用し、フォールバックも適用
     // content.jsでPARALLEL_READ_SCROLLメッセージを処理
     try {
       iframe.contentWindow.postMessage({
@@ -344,6 +349,9 @@ export function useWebReader(paneIndex) {
     } catch (postError) {
       console.error('WebReader.prev: postMessage failed:', postError)
     }
+
+    // 常にCSS transformフォールバックも適用（content.jsが動作しない場合のため）
+    scrollByFallback(-scrollAmount)
   }
 
   // Listen for iframe postMessage responses (e.g., scroll info)
@@ -500,7 +508,7 @@ export function useWebReader(paneIndex) {
       }
     }
 
-    // クロスオリジンの場合はpostMessageを使用
+    // クロスオリジンの場合はpostMessageを使用し、フォールバックも適用
     try {
       iframe.contentWindow.postMessage({
         type: 'PARALLEL_READ_SCROLL',
@@ -510,6 +518,9 @@ export function useWebReader(paneIndex) {
     } catch (postError) {
       console.error('scrollBy: postMessage failed:', postError)
     }
+
+    // 常にCSS transformフォールバックも適用（content.jsが動作しない場合のため）
+    scrollByFallback(actualDistance)
   }
 
   // Scroll by vh unit (for external calls from App.vue)
@@ -578,6 +589,28 @@ export function useWebReader(paneIndex) {
     }
   }
 
+  // Apply combined CSS transform for font size and scroll (fallback for cross-origin iframes)
+  function applyIframeTransform() {
+    if (!iframe) return
+
+    const zoomLevel = currentFontSize / 100
+
+    // Combine scale (font size) and translateY (scroll) in a single transform
+    // Note: translateY is applied after scale, so we need to adjust for zoom level
+    const adjustedScrollOffset = currentScrollOffset / zoomLevel
+    iframe.style.transform = `scale(${zoomLevel}) translateY(${-adjustedScrollOffset}px)`
+    iframe.style.transformOrigin = 'top left'
+
+    // Adjust iframe size to compensate for transform scale
+    if (zoomLevel !== 1) {
+      iframe.style.width = `${100 / zoomLevel}%`
+      iframe.style.height = `${100 / zoomLevel}%`
+    } else {
+      iframe.style.width = '100%'
+      iframe.style.height = '100%'
+    }
+  }
+
   // Fallback function to apply font size using CSS transform on the iframe element
   // This works for cross-origin iframes where we cannot access the document
   function applyFontSizeFallback(size) {
@@ -587,25 +620,30 @@ export function useWebReader(paneIndex) {
     }
 
     console.log('WebReader.applyFontSizeFallback: applying transform scale', size)
+    currentFontSize = size
+    applyIframeTransform()
+    console.log(`Font size fallback applied: ${size}% (scale: ${size / 100})`)
+  }
 
-    const zoomLevel = size / 100
-
-    // Use CSS transform to scale the iframe content
-    // transform: scale() is more widely supported than zoom
-    iframe.style.transform = `scale(${zoomLevel})`
-    iframe.style.transformOrigin = 'top left'
-
-    // Adjust iframe size to compensate for transform scale
-    // This ensures the iframe still fills its container
-    if (zoomLevel !== 1) {
-      iframe.style.width = `${100 / zoomLevel}%`
-      iframe.style.height = `${100 / zoomLevel}%`
-    } else {
-      iframe.style.width = '100%'
-      iframe.style.height = '100%'
+  // Fallback function to scroll using CSS transform on the iframe element
+  // This works for cross-origin iframes where postMessage doesn't work
+  function scrollByFallback(distance) {
+    if (!iframe) {
+      console.warn('Cannot apply scroll fallback: iframe not ready')
+      return
     }
 
-    console.log(`Font size fallback applied: ${size}% (scale: ${zoomLevel})`)
+    // Update scroll offset (don't go below 0)
+    currentScrollOffset = Math.max(0, currentScrollOffset + distance)
+    console.log('WebReader.scrollByFallback: scrollOffset =', currentScrollOffset)
+
+    applyIframeTransform()
+  }
+
+  // Reset scroll offset (used when loading new URL)
+  function resetScrollOffset() {
+    currentScrollOffset = 0
+    applyIframeTransform()
   }
 
   // Helper function to apply font size to document
