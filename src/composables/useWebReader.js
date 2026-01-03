@@ -33,6 +33,11 @@ export function useWebReader(paneIndex) {
     // Remove leading/trailing whitespace
     urlString = urlString.trim()
 
+    // Accept blob: URLs as-is (for local HTML files)
+    if (/^blob:/i.test(urlString)) {
+      return urlString
+    }
+
     // If it doesn't start with http:// or https://, add https://
     if (!/^https?:\/\//i.test(urlString)) {
       urlString = 'https://' + urlString
