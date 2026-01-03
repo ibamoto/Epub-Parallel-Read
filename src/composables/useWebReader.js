@@ -383,9 +383,33 @@ export function useWebReader(paneIndex) {
       // Only process PARALLEL_READ_WHEEL messages
       if (!event?.data || event.data.type !== 'PARALLEL_READ_WHEEL') return
 
-      // Check if this message is from our iframe
-      // The event.source should be the iframe's contentWindow
-      if (!iframe || event.source !== iframe.contentWindow) return
+      if (!iframe || !containerRef.value) return
+
+      // Check if this message is from our iframe using multiple methods
+      let isFromThisPane = false
+
+      // Method 1: Direct source comparison (works for top-level iframe content)
+      if (event.source === iframe.contentWindow) {
+        isFromThisPane = true
+      }
+
+      // Method 2: Screen coordinate comparison (works for nested iframes)
+      if (!isFromThisPane && event.data.screenX !== undefined && event.data.screenY !== undefined) {
+        const rect = iframe.getBoundingClientRect()
+        const iframeScreenLeft = window.screenX + rect.left
+        const iframeScreenTop = window.screenY + rect.top
+        const iframeScreenRight = iframeScreenLeft + rect.width
+        const iframeScreenBottom = iframeScreenTop + rect.height
+
+        if (event.data.screenX >= iframeScreenLeft &&
+            event.data.screenX <= iframeScreenRight &&
+            event.data.screenY >= iframeScreenTop &&
+            event.data.screenY <= iframeScreenBottom) {
+          isFromThisPane = true
+        }
+      }
+
+      if (!isFromThisPane) return
 
       const { deltaY } = event.data
 
