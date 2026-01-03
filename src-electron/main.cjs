@@ -35,6 +35,7 @@ function createWindow() {
       contextIsolation: true,
       sandbox: false,
       webSecurity: false, // クロスオリジン制限を緩和（URLリーダーのスクロール同期のため）
+      webviewTag: true, // Enable webview element for better cross-origin iframe control
     },
     titleBarStyle: 'hiddenInset',
     trafficLightPosition: { x: 15, y: 15 },
