@@ -88,6 +88,9 @@ onMounted(() => {
   window.addEventListener('keydown', handleKeyDown)
   window.addEventListener('resize', handleWindowResize)
 
+  // Global wheel listener for URL-URL sync (works even when mouse is outside iframes)
+  window.addEventListener('wheel', handleGlobalWheel, { passive: true })
+
   // Setup wheel event listeners for scroll sync (after mount)
   setupWheelSyncListeners()
 
@@ -96,11 +99,12 @@ onMounted(() => {
 })
 
 // クロスオリジン制限により、iframe内からのメッセージ受信は不可能
-// 代わりに、.reader-view上のホイールイベントを使用してスクロール同期を実現
+// 代わりに、グローバルなwheelイベントを使用してスクロール同期を実現
 
 onUnmounted(() => {
   window.removeEventListener('keydown', handleKeyDown)
   window.removeEventListener('resize', handleWindowResize)
+  window.removeEventListener('wheel', handleGlobalWheel)
   window.removeEventListener('urlWheelScroll', handleUrlWheelSync, true)
   if (syncTimeout) clearTimeout(syncTimeout)
   isSyncing = false
@@ -467,6 +471,40 @@ function handleWheelSync(event, sourceIndex) {
   //
   // 仕様: READER_SPECIFICATIONS.md を参照（URLリーダーは別途実装中）
   // ============================================
+}
+
+/**
+ * グローバルなwheelイベントハンドラ
+ *
+ * 両方のペインがURLの場合、マウス位置に関係なく両方のペインにスクロールを適用
+ * これにより、iframe外でホイールしても両方のブラウザがスクロールする
+ */
+let globalWheelThrottle = null
+function handleGlobalWheel(event) {
+  // Skip if sync mode is off
+  if (!settingsStore.syncMode) return
+
+  // 両方のペインがURLの場合のみ処理
+  const fileType1 = readerStore.fileTypes[0]
+  const fileType2 = readerStore.fileTypes[1]
+  if (fileType1 !== 'url' || fileType2 !== 'url') return
+
+  // 両方のペインにファイルが開かれている場合のみ
+  const hasFile1 = readerStore.books[0] !== null
+  const hasFile2 = readerStore.books[1] !== null
+  if (!hasFile1 || !hasFile2) return
+
+  // Throttle to avoid overwhelming the iframes
+  if (globalWheelThrottle) return
+  globalWheelThrottle = setTimeout(() => {
+    globalWheelThrottle = null
+  }, 50)
+
+  const deltaY = event.deltaY
+
+  // 両方のペインにスクロールを適用
+  reader1.value?.scrollBy?.(deltaY * settingsStore.syncSensitivity)
+  reader2.value?.scrollBy?.(deltaY * settingsStore.syncSensitivity)
 }
 
 /**
