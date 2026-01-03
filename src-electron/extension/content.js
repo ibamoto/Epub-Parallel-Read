@@ -57,6 +57,26 @@
   // Listen for postMessage from parent window (for cross-origin iframe scrolling and styling)
   window.addEventListener('message', (event) => {
     // Security: 信頼できるソースからのメッセージのみ処理
+    const trustedOrigins = new Set()
+    try {
+      const referrerOrigin = new URL(document.referrer || '').origin
+      if (referrerOrigin) trustedOrigins.add(referrerOrigin)
+    } catch (e) {
+      // ignore invalid referrer
+    }
+
+    // Always allow same-origin messages
+    trustedOrigins.add(window.location.origin)
+    // For file:// origins, event.origin is "null"
+    trustedOrigins.add('null')
+
+    const isTrustedOrigin = event.origin && trustedOrigins.has(event.origin)
+
+    if (!isTrustedOrigin) {
+      console.warn('Content script: rejected postMessage from untrusted origin', event.origin)
+      return
+    }
+
     if (event.data && event.data.type === 'PARALLEL_READ_SCROLL') {
       if (event.data.action === 'scroll-by') {
         try {
@@ -363,4 +383,3 @@
     // Ignore errors if background script is not ready
   });
 })();
-

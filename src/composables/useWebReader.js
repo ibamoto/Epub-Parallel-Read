@@ -12,37 +12,15 @@ export function useWebReader(paneIndex) {
   let currentUrl = null
   let currentFontSize = 100
 
-  // Pending scroll info requests for postMessage-based communication
-  const pendingScrollInfoRequests = new Map()
-  let scrollInfoRequestId = 0
-
-  // Setup message listener for postMessage responses
-  function setupMessageListener() {
-    window.addEventListener('message', handlePostMessage)
-  }
-
-  function removeMessageListener() {
-    window.removeEventListener('message', handlePostMessage)
-  }
-
-  function handlePostMessage(event) {
-    if (event.data && event.data.type === 'PARALLEL_READ_RESPONSE') {
-      const requestId = event.data.requestId
-      if (pendingScrollInfoRequests.has(requestId)) {
-        const { resolve, reject } = pendingScrollInfoRequests.get(requestId)
-        pendingScrollInfoRequests.delete(requestId)
-
-        if (event.data.success) {
-          resolve(event.data)
-        } else {
-          reject(new Error(event.data.error || 'Unknown error'))
-        }
-      }
+  function getTargetOrigin() {
+    if (!currentUrl) return '*'
+    try {
+      const origin = new URL(currentUrl).origin
+      return origin || '*'
+    } catch (e) {
+      return '*'
     }
   }
-
-  // Initialize message listener
-  setupMessageListener()
 
   // Validate and normalize URL
   function normalizeUrl(urlString) {
@@ -348,11 +326,12 @@ export function useWebReader(paneIndex) {
       // コンテンツスクリプトはiframe内で実行されているため、クロスオリジン制限を回避できる
       try {
         console.log('WebReader.prev: trying postMessage to iframe')
+        const targetOrigin = getTargetOrigin()
         iframe.contentWindow.postMessage({
           type: 'PARALLEL_READ_SCROLL',
           action: 'scroll-by',
           distance: -scrollAmount
-        }, '*')
+        }, targetOrigin)
         console.log('WebReader.prev: postMessage sent')
       } catch (postError) {
         console.error('WebReader.prev: postMessage failed:', postError)
@@ -536,11 +515,12 @@ export function useWebReader(paneIndex) {
           console.error('WebReader.applyFontSize: Electron IPC failed:', err)
           // フォールバック: postMessageを使用
           try {
+            const targetOrigin = getTargetOrigin()
             iframe.contentWindow.postMessage({
               type: 'PARALLEL_READ_FONT_SIZE',
               action: 'apply-font-size',
               fontSize: size
-            }, '*')
+            }, targetOrigin)
             console.log('WebReader.applyFontSize: postMessage sent (fallback)')
           } catch (postError) {
             console.error('WebReader.applyFontSize: postMessage failed:', postError)
@@ -549,11 +529,12 @@ export function useWebReader(paneIndex) {
     } else {
       // electronAPIが利用できない場合、postMessageを使用
       try {
+        const targetOrigin = getTargetOrigin()
         iframe.contentWindow.postMessage({
           type: 'PARALLEL_READ_FONT_SIZE',
           action: 'apply-font-size',
           fontSize: size
-        }, '*')
+        }, targetOrigin)
         console.log('WebReader.applyFontSize: postMessage sent')
       } catch (postError) {
         console.error('WebReader.applyFontSize: postMessage failed:', postError)
@@ -664,10 +645,11 @@ export function useWebReader(paneIndex) {
           console.error('WebReader.preventHorizontalScroll: Electron IPC failed:', err)
           // フォールバック: postMessageを使用
           try {
+            const targetOrigin = getTargetOrigin()
             iframe.contentWindow.postMessage({
               type: 'PARALLEL_READ_SCROLL',
               action: 'prevent-horizontal-scroll'
-            }, '*')
+            }, targetOrigin)
             console.log('WebReader.preventHorizontalScroll: postMessage sent (fallback)')
           } catch (postError) {
             console.error('WebReader.preventHorizontalScroll: postMessage failed:', postError)
@@ -676,10 +658,11 @@ export function useWebReader(paneIndex) {
     } else {
       // electronAPIが利用できない場合、postMessageを使用
       try {
+        const targetOrigin = getTargetOrigin()
         iframe.contentWindow.postMessage({
           type: 'PARALLEL_READ_SCROLL',
           action: 'prevent-horizontal-scroll'
-        }, '*')
+        }, targetOrigin)
         console.log('WebReader.preventHorizontalScroll: postMessage sent')
       } catch (postError) {
         console.error('WebReader.preventHorizontalScroll: postMessage failed:', postError)
@@ -815,4 +798,3 @@ export function useWebReader(paneIndex) {
     cleanup,
   }
 }
-
