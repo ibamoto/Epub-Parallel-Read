@@ -8,8 +8,7 @@ export function useWebReader(paneIndex) {
 
   const containerRef = ref(null)
   const isReady = ref(false)
-  let iframe = null // Can be iframe or webview element
-  let isWebview = false // True if using Electron webview
+  let iframe = null
   let currentUrl = null
   let currentFontSize = 100
   let scrollInfoRequestId = 0
@@ -74,9 +73,6 @@ export function useWebReader(paneIndex) {
       // Setup container
       setupContainer()
 
-      // Load URL in iframe
-      iframe.src = normalizedUrl
-
       // Store references
       readerStore.setBook(paneIndex, { url: normalizedUrl }, 'url')
       readerStore.setFileName(paneIndex, normalizedUrl)
@@ -89,6 +85,7 @@ export function useWebReader(paneIndex) {
       }])
 
       // Wait for iframe to load
+      // IMPORTANT: Set up handlers BEFORE setting src to avoid race conditions
       await new Promise((resolve, reject) => {
         const timeout = setTimeout(() => {
           reject(new Error('ページの読み込みがタイムアウトしました'))
@@ -109,6 +106,9 @@ export function useWebReader(paneIndex) {
           clearTimeout(timeout)
           reject(new Error('ページの読み込みに失敗しました'))
         }
+
+        // Set URL AFTER handlers are attached
+        iframe.src = normalizedUrl
       })
 
       isReady.value = true
@@ -153,66 +153,27 @@ export function useWebReader(paneIndex) {
       min-height: 0;
     `
 
-    // Use webview in Electron environment for better cross-origin control
-    // Use iframe in browser environment
-    isWebview = typeof window !== 'undefined' && !!window.electronAPI
-
-    if (isWebview) {
-      // Create webview element (Electron only)
-      iframe = document.createElement('webview')
-      iframe.id = `web-reader-webview-${paneIndex}`
-      iframe.className = 'web-reader-webview'
-      iframe.style.cssText = `
-        width: 100%;
-        height: 100%;
-        border: none;
-        background: white;
-        display: block;
-        position: absolute;
-        top: 0;
-        left: 0;
-        right: 0;
-        bottom: 0;
-        min-width: 0;
-        min-height: 0;
-      `
-      // Enable node integration for webview to use executeJavaScript
-      iframe.setAttribute('webpreferences', 'contextIsolation=yes')
-      iframe.setAttribute('allowpopups', '')
-
-      // Listen for dom-ready event to apply initial settings
-      iframe.addEventListener('dom-ready', () => {
-        console.log('WebReader: webview dom-ready')
-        isReady.value = true
-        preventHorizontalScroll()
-        // Apply initial font size
-        if (currentFontSize !== 100) {
-          applyFontSizeToWebview(currentFontSize)
-        }
-      })
-    } else {
-      // Create iframe (browser environment)
-      iframe = document.createElement('iframe')
-      iframe.id = `web-reader-iframe-${paneIndex}`
-      iframe.className = 'web-reader-iframe'
-      iframe.style.cssText = `
-        width: 100%;
-        height: 100%;
-        border: none;
-        background: white;
-        overflow: auto;
-        display: block;
-        position: absolute;
-        top: 0;
-        left: 0;
-        right: 0;
-        bottom: 0;
-        min-width: 0;
-        min-height: 0;
-      `
-      iframe.setAttribute('scrolling', 'yes')
-      iframe.setAttribute('referrerpolicy', 'no-referrer-when-downgrade')
-    }
+    // Always use iframe - extension content.js handles cross-origin communication
+    iframe = document.createElement('iframe')
+    iframe.id = `web-reader-iframe-${paneIndex}`
+    iframe.className = 'web-reader-iframe'
+    iframe.style.cssText = `
+      width: 100%;
+      height: 100%;
+      border: none;
+      background: white;
+      overflow: auto;
+      display: block;
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      min-width: 0;
+      min-height: 0;
+    `
+    iframe.setAttribute('scrolling', 'yes')
+    iframe.setAttribute('referrerpolicy', 'no-referrer-when-downgrade')
 
     container.appendChild(iframe)
 
@@ -281,27 +242,13 @@ export function useWebReader(paneIndex) {
    * @see READER_SPECIFICATIONS.md (EPUB/Markdown/PDFの仕様)
    */
   function next() {
-    console.log('WebReader.next called', {
-      hasIframe: !!iframe,
-      isWebview,
-      paneIndex
-    })
-
     if (!iframe) {
-      console.warn('WebReader.next: iframe/webview not available')
+      console.warn('WebReader.next: iframe not available')
       return
     }
 
     const scrollAmount = calculateScrollDistance()
-    console.log('WebReader.next: scrolling down by', scrollAmount, 'px')
 
-    // webviewの場合はexecuteJavaScriptを使用
-    if (isWebview && iframe.executeJavaScript) {
-      scrollWebview(scrollAmount)
-      return
-    }
-
-    // iframe の場合
     if (!iframe.contentWindow) {
       console.warn('WebReader.next: contentWindow not available')
       return
@@ -351,27 +298,13 @@ export function useWebReader(paneIndex) {
    * @see READER_SPECIFICATIONS.md (EPUB/Markdown/PDFの仕様)
    */
   function prev() {
-    console.log('WebReader.prev called', {
-      hasIframe: !!iframe,
-      isWebview,
-      paneIndex
-    })
-
     if (!iframe) {
-      console.warn('WebReader.prev: iframe/webview not available')
+      console.warn('WebReader.prev: iframe not available')
       return
     }
 
     const scrollAmount = calculateScrollDistance()
-    console.log('WebReader.prev: scrolling up by', scrollAmount, 'px')
 
-    // webviewの場合はexecuteJavaScriptを使用
-    if (isWebview && iframe.executeJavaScript) {
-      scrollWebview(-scrollAmount)
-      return
-    }
-
-    // iframe の場合
     if (!iframe.contentWindow) {
       console.warn('WebReader.prev: contentWindow not available')
       return
@@ -582,13 +515,6 @@ export function useWebReader(paneIndex) {
       actualDistance = (distance > 0 ? 1 : -1) * calculateScrollDistance()
     }
 
-    // webviewの場合はexecuteJavaScriptを使用
-    if (isWebview && iframe.executeJavaScript) {
-      scrollWebview(actualDistance)
-      return
-    }
-
-    // iframe の場合
     if (!iframe.contentWindow) {
       return
     }
@@ -624,52 +550,6 @@ export function useWebReader(paneIndex) {
     }
   }
 
-  // Scroll webview using executeJavaScript (Electron only)
-  function scrollWebview(distance) {
-    if (!iframe || !iframe.executeJavaScript) {
-      console.warn('scrollWebview: webview not available')
-      return
-    }
-
-    iframe.executeJavaScript(`
-      window.scrollBy({
-        top: ${distance},
-        behavior: 'smooth'
-      });
-    `).catch(err => {
-      console.error('scrollWebview failed:', err)
-    })
-  }
-
-  // Apply font size to webview using executeJavaScript (Electron only)
-  function applyFontSizeToWebview(size) {
-    if (!iframe || !iframe.executeJavaScript) {
-      console.warn('applyFontSizeToWebview: webview not available')
-      return
-    }
-
-    const scale = Math.max(0.5, Math.min(2, size / 100))
-
-    iframe.executeJavaScript(`
-      (function() {
-        let styleEl = document.getElementById('epub-parallel-read-font-size-style');
-        if (!styleEl) {
-          styleEl = document.createElement('style');
-          styleEl.id = 'epub-parallel-read-font-size-style';
-          document.head.appendChild(styleEl);
-        }
-        styleEl.textContent = \`
-          html, body {
-            font-size: ${size}% !important;
-            zoom: ${scale} !important;
-          }
-        \`;
-      })();
-    `).catch(err => {
-      console.error('applyFontSizeToWebview failed:', err)
-    })
-  }
-
   // Scroll by vh unit (for external calls from App.vue)
   function scrollByVh(vhAmount) {
     if (!iframe) return
@@ -687,15 +567,6 @@ export function useWebReader(paneIndex) {
       return
     }
 
-    console.log('WebReader.applyFontSize called:', size)
-
-    // webviewの場合はexecuteJavaScriptを使用
-    if (isWebview && iframe.executeJavaScript) {
-      applyFontSizeToWebview(size)
-      return
-    }
-
-    // iframe の場合
     const targetOrigin = getTargetOrigin()
     const isSameOrigin =
       targetOrigin !== '*' &&
