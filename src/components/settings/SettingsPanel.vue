@@ -60,6 +60,26 @@
             </div>
           </section>
 
+          <!-- Keyboard Shortcuts Section -->
+          <section class="settings-section">
+            <h4>キーボードショートカット</h4>
+
+            <div class="shortcut-setting">
+              <label class="shortcut-label">スクロール同期の切り替え</label>
+              <div class="shortcut-options">
+                <button
+                  v-for="option in shortcutOptionsForDisplay"
+                  :key="option.value"
+                  class="shortcut-btn"
+                  :class="{ active: settingsStore.syncModeShortcut === option.value }"
+                  @click="handleShortcutChange(option.value)"
+                >
+                  {{ option.displayLabel }}
+                </button>
+              </div>
+            </div>
+          </section>
+
           <!-- Actions -->
           <div class="settings-actions">
             <button class="reset-btn" @click="resetSettings">
@@ -73,9 +93,12 @@
 </template>
 
 <script setup>
-import { ref, watch, reactive } from 'vue'
+import { ref, watch, reactive, computed } from 'vue'
 import { useSettingsStore } from '../../stores/settings'
 import SettingsPaneContent from './SettingsPaneContent.vue'
+
+// Detect if Mac
+const isMac = navigator.platform.toUpperCase().indexOf('MAC') >= 0
 
 const props = defineProps({
   visible: {
@@ -97,6 +120,14 @@ const themeOptions = [
   { value: 'dark', label: 'ダーク', bg: '#1a1a1a', text: '#e0e0e0' },
   { value: 'sepia', label: 'セピア', bg: '#f4ecd8', text: '#5c4b37' },
 ]
+
+// Shortcut options with display label based on platform
+const shortcutOptionsForDisplay = computed(() => {
+  return settingsStore.shortcutOptions.map(option => ({
+    value: option.value,
+    displayLabel: isMac ? option.macLabel : option.label,
+  }))
+})
 
 // Local copies of settings for both panes
 const leftSettings = reactive({ ...settingsStore.paneSettings[0] })
@@ -136,6 +167,12 @@ function syncToLeft() {
 // Handle theme change
 function handleThemeChange(themeValue) {
   settingsStore.setTheme(themeValue)
+  emit('settings-changed')
+}
+
+// Handle shortcut change
+function handleShortcutChange(shortcutValue) {
+  settingsStore.setSyncModeShortcut(shortcutValue)
   emit('settings-changed')
 }
 
@@ -306,6 +343,46 @@ function resetSettings() {
 .theme-btn.active {
   border-color: var(--accent-color);
   box-shadow: 0 0 0 2px var(--accent-light);
+}
+
+.shortcut-setting {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.shortcut-label {
+  font-size: 0.85rem;
+  color: var(--text-secondary);
+}
+
+.shortcut-options {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.shortcut-btn {
+  padding: 0.5rem 0.75rem;
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  font-size: 0.8rem;
+  font-family: monospace;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.shortcut-btn:hover {
+  background: var(--bg-hover);
+  border-color: var(--accent-color);
+}
+
+.shortcut-btn.active {
+  background: var(--accent-color);
+  border-color: var(--accent-color);
+  color: white;
 }
 
 .settings-actions {

@@ -32,6 +32,18 @@ export const useSettingsStore = defineStore('settings', () => {
   const showControls = ref(true)
   const syncSensitivity = ref(1.0)
 
+  // Keyboard shortcut for sync mode toggle
+  // Options: 'ctrl+shift+s', 'alt+s', 'ctrl+/', 'none'
+  const syncModeShortcut = ref('ctrl+shift+s')
+
+  // Available shortcut options
+  const shortcutOptions = [
+    { value: 'ctrl+shift+s', label: 'Ctrl+Shift+S', macLabel: 'Cmd+Shift+S' },
+    { value: 'alt+s', label: 'Alt+S', macLabel: 'Option+S' },
+    { value: 'ctrl+/', label: 'Ctrl+/', macLabel: 'Cmd+/' },
+    { value: 'none', label: '無効', macLabel: '無効' },
+  ]
+
 
   // Per-pane, per-file-type scroll settings
   // Each setting has: { amount: number, unit: 'px' | 'page' | 'vh' }
@@ -106,6 +118,7 @@ export const useSettingsStore = defineStore('settings', () => {
         syncMode.value = parsed.syncMode ?? false
         showControls.value = parsed.showControls ?? true
         syncSensitivity.value = parsed.syncSensitivity ?? 1.0
+        syncModeShortcut.value = parsed.syncModeShortcut ?? 'ctrl+shift+s'
         theme.value = parsed.theme ?? 'light'
         // New per-file-type scroll settings
         epubScrollSettings.value = parsed.epubScrollSettings ?? [
@@ -156,6 +169,7 @@ export const useSettingsStore = defineStore('settings', () => {
         syncMode: syncMode.value,
         showControls: showControls.value,
         syncSensitivity: syncSensitivity.value,
+        syncModeShortcut: syncModeShortcut.value,
         theme: theme.value,
         customColors: customColors.value,
         paneSettings: paneSettings.value,
@@ -191,6 +205,11 @@ export const useSettingsStore = defineStore('settings', () => {
 
   function toggleControls() {
     showControls.value = !showControls.value
+    saveSettings()
+  }
+
+  function setSyncModeShortcut(value) {
+    syncModeShortcut.value = value
     saveSettings()
   }
 
@@ -322,7 +341,7 @@ export const useSettingsStore = defineStore('settings', () => {
   }
 
   // Auto-save on changes
-  watch([isDarkMode, syncMode, showControls, syncSensitivity, theme, customColors, paneSettings, scrollAmounts, pdfPageAmounts, urlFontSizes, useWheelAmount, showProgressBar, epubScrollSettings, markdownScrollSettings, urlScrollSettings, pdfScrollSettings], () => {
+  watch([isDarkMode, syncMode, showControls, syncSensitivity, syncModeShortcut, theme, customColors, paneSettings, scrollAmounts, pdfPageAmounts, urlFontSizes, useWheelAmount, showProgressBar, epubScrollSettings, markdownScrollSettings, urlScrollSettings, pdfScrollSettings], () => {
     saveSettings()
   }, { deep: true })
 
@@ -332,6 +351,8 @@ export const useSettingsStore = defineStore('settings', () => {
     syncMode,
     showControls,
     syncSensitivity,
+    syncModeShortcut,
+    shortcutOptions,
     theme,
     customColors,
     paneSettings,
@@ -354,6 +375,7 @@ export const useSettingsStore = defineStore('settings', () => {
     toggleDarkMode,
     toggleSyncMode,
     toggleControls,
+    setSyncModeShortcut,
     updatePaneSettings,
     resetPaneSettings,
     setScrollAmount,

@@ -564,6 +564,31 @@ function handleKeyDown(event) {
     return
   }
 
+  // Sync mode toggle shortcut
+  const shortcut = settingsStore.syncModeShortcut
+  if (shortcut !== 'none') {
+    const isMac = navigator.platform.toUpperCase().indexOf('MAC') >= 0
+    const modKey = isMac ? event.metaKey : event.ctrlKey
+
+    let matched = false
+    if (shortcut === 'ctrl+shift+s' && modKey && event.shiftKey && event.key.toLowerCase() === 's') {
+      matched = true
+    } else if (shortcut === 'alt+s' && event.altKey && !modKey && !event.shiftKey && event.key.toLowerCase() === 's') {
+      matched = true
+    } else if (shortcut === 'ctrl+/' && modKey && !event.shiftKey && event.key === '/') {
+      matched = true
+    }
+
+    if (matched) {
+      event.preventDefault()
+      // Only toggle if both files are open
+      if (readerStore.fileTypes[0] !== null && readerStore.fileTypes[1] !== null) {
+        settingsStore.toggleSyncMode()
+      }
+      return
+    }
+  }
+
   // Arrow keys for navigation
   const fileType1 = readerStore.fileTypes[0]
   const fileType2 = readerStore.fileTypes[1]
