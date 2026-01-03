@@ -63,13 +63,6 @@
           <span class="progress-text">{{ Math.round(progressPercent1) }}%</span>
         </div>
       </div>
-
-      <!-- File info -->
-      <div class="unified-file-info">
-        <span v-if="readerStore.fileNames[0]" class="file-name left">{{ readerStore.fileNames[0] }}</span>
-        <span class="separator">|</span>
-        <span v-if="readerStore.fileNames[1]" class="file-name right">{{ readerStore.fileNames[1] }}</span>
-      </div>
     </div>
 
     <!-- Global Error Message -->
@@ -1176,25 +1169,6 @@ body,
   color: var(--text-tertiary);
   min-width: 3em;
   text-align: right;
-}
-
-.unified-file-info {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  font-size: 0.75rem;
-  color: var(--text-tertiary);
-}
-
-.unified-file-info .file-name {
-  max-width: 120px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.unified-file-info .separator {
-  color: var(--border-color);
 }
 
 /* Responsive */
