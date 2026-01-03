@@ -512,9 +512,15 @@ export function useEpubReader(paneIndex) {
     savePosition()
   }
 
-  function scrollBy(distance) {
+  // Scroll by distance (in pixels) or use settings-based calculation
+  function scrollBy(distance, useSettings = false) {
     if (!contentWrapper.value) return
-    contentWrapper.value.scrollBy({ top: distance, behavior: 'smooth' })
+    let actualDistance = distance
+    if (useSettings) {
+      // Use settings-based scroll amount with sign from distance
+      actualDistance = (distance > 0 ? 1 : -1) * calculateScrollDistance()
+    }
+    contentWrapper.value.scrollBy({ top: actualDistance, behavior: 'smooth' })
     savePosition()
   }
 
@@ -628,13 +634,30 @@ export function useEpubReader(paneIndex) {
   }
 
   /**
+   * Calculate scroll distance based on EPUB settings (supports px and page units)
+   */
+  function calculateScrollDistance() {
+    const settings = settingsStore.epubScrollSettings[paneIndex] || { amount: 100, unit: 'px' }
+    let scrollAmount = settings.amount
+
+    if (settings.unit === 'page') {
+      // Convert page to pixels based on viewport height
+      const viewportHeight = contentWrapper.value?.clientHeight || window.innerHeight
+      scrollAmount = settings.amount * viewportHeight * 0.9 // 90% of viewport per page
+    }
+    // 'px' unit uses the amount directly
+
+    return scrollAmount
+  }
+
+  /**
    * EPUBリーダーのホイールイベントハンドラーを設定
-   * 
+   *
    * 仕様: READER_SPECIFICATIONS.md を参照
    * - ソースペインのスクロールを実行（スクロール同期モードでも実行される）
    * - ターゲットペインの同期はApp.vueのhandleWheelSyncで処理される
    * - デバウンス: 50ms
-   * - スクロール量: scrollAmounts[paneIndex]
+   * - スクロール量: epubScrollSettings[paneIndex] (px または page単位)
    */
   function setupWheelHandler() {
     if (!contentWrapper.value) return
@@ -657,9 +680,9 @@ export function useEpubReader(paneIndex) {
       }
       wheelHandler.lastTime = Date.now()
 
-      // 常に設定されたスクロール量を使用
+      // 常に設定されたスクロール量を使用 (px または page単位)
       // スクロール同期モードの時でも、ソースペインのスクロールは実行する
-      const scrollAmount = settingsStore.scrollAmounts[paneIndex] || 100
+      const scrollAmount = calculateScrollDistance()
       const direction = e.deltaY > 0 ? 1 : -1
       contentWrapper.value.scrollBy({
         top: direction * scrollAmount,
@@ -852,6 +875,7 @@ export function useEpubReader(paneIndex) {
     next,
     prev,
     scrollBy,
+    calculateScrollDistance,
     resize,
     applyTheme,
     applySettings,
