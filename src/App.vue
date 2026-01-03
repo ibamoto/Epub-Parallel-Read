@@ -291,13 +291,31 @@ function handleWheelSync(event, sourceIndex) {
   // - スクロール同期モードが有効な場合のみ実行される
   // ============================================
 
+  // Helper function to get scroll amount based on file type and pane index
+  function getScrollAmountForType(fileType, paneIdx) {
+    const targetRef = paneIdx === 0 ? reader1.value : reader2.value
+    // Use the reader's calculateScrollDistance if available
+    if (targetRef?.calculateScrollDistance) {
+      return targetRef.calculateScrollDistance()
+    }
+    // Fallback to settings
+    const settings = settingsStore.getScrollSettingsForType(fileType, paneIdx)
+    return settings.amount
+  }
+
+  // Helper function to get PDF page amount
+  function getPdfPageAmount(paneIdx) {
+    const settings = settingsStore.pdfScrollSettings[paneIdx] || { amount: 1, unit: 'page' }
+    return settings.amount
+  }
+
+  const direction = event.deltaY > 0 ? 1 : -1
+
   // EPUB-EPUB: 両方のコンテナをスクロール
   if (sourceType === 'epub' && targetType === 'epub') {
     const targetContainer = target?.$el?.querySelector?.(`.epub-content-${1 - sourceIndex}`)
     if (targetContainer) {
-      // 常に設定されたスクロール量を使用
-      const scrollAmount = settingsStore.scrollAmounts[1 - sourceIndex] || 100
-      const direction = event.deltaY > 0 ? 1 : -1
+      const scrollAmount = getScrollAmountForType('epub', 1 - sourceIndex)
       targetContainer.scrollBy({
         top: direction * scrollAmount * settingsStore.syncSensitivity,
         behavior: 'smooth'
@@ -306,31 +324,19 @@ function handleWheelSync(event, sourceIndex) {
   }
   // PDF-PDF: 両方のPDFでページ移動
   else if (sourceType === 'pdf' && targetType === 'pdf') {
-    // 常に設定されたページ数を使用
-    const pageAmount = settingsStore.pdfPageAmounts[1 - sourceIndex] || 1
-    if (event.deltaY > 0) {
-      target?.pageBy?.(pageAmount)
-    } else if (event.deltaY < 0) {
-      target?.pageBy?.(-pageAmount)
-    }
+    const pageAmount = getPdfPageAmount(1 - sourceIndex)
+    target?.pageBy?.(direction * pageAmount)
   }
   // EPUB-PDF: EPUBをスクロール、PDFでページ移動
   else if (sourceType === 'epub' && targetType === 'pdf') {
-    // 常に設定されたページ数を使用
-    const pageAmount = settingsStore.pdfPageAmounts[1 - sourceIndex] || 1
-    if (event.deltaY > 0) {
-      target?.pageBy?.(pageAmount)
-    } else if (event.deltaY < 0) {
-      target?.pageBy?.(-pageAmount)
-    }
+    const pageAmount = getPdfPageAmount(1 - sourceIndex)
+    target?.pageBy?.(direction * pageAmount)
   }
   // PDF-EPUB: PDFでページ移動、EPUBをスクロール
   else if (sourceType === 'pdf' && targetType === 'epub') {
     const targetContainer = target?.$el?.querySelector?.(`.epub-content-${1 - sourceIndex}`)
     if (targetContainer) {
-      // 常に設定されたスクロール量を使用
-      const scrollAmount = settingsStore.scrollAmounts[1 - sourceIndex] || 100
-      const direction = event.deltaY > 0 ? 1 : -1
+      const scrollAmount = getScrollAmountForType('epub', 1 - sourceIndex)
       targetContainer.scrollBy({
         top: direction * scrollAmount * settingsStore.syncSensitivity,
         behavior: 'smooth'
@@ -341,8 +347,7 @@ function handleWheelSync(event, sourceIndex) {
   else if (sourceType === 'markdown' && targetType === 'markdown') {
     const targetContainer = target?.$el?.querySelector?.('.reader-view')
     if (targetContainer) {
-      const scrollAmount = settingsStore.scrollAmounts[1 - sourceIndex] || 100
-      const direction = event.deltaY > 0 ? 1 : -1
+      const scrollAmount = getScrollAmountForType('markdown', 1 - sourceIndex)
       targetContainer.scrollBy({
         top: direction * scrollAmount * settingsStore.syncSensitivity,
         behavior: 'smooth'
@@ -353,8 +358,7 @@ function handleWheelSync(event, sourceIndex) {
   else if (sourceType === 'markdown' && targetType === 'epub') {
     const targetContainer = target?.$el?.querySelector?.(`.epub-content-${1 - sourceIndex}`)
     if (targetContainer) {
-      const scrollAmount = settingsStore.scrollAmounts[1 - sourceIndex] || 100
-      const direction = event.deltaY > 0 ? 1 : -1
+      const scrollAmount = getScrollAmountForType('epub', 1 - sourceIndex)
       targetContainer.scrollBy({
         top: direction * scrollAmount * settingsStore.syncSensitivity,
         behavior: 'smooth'
@@ -365,8 +369,7 @@ function handleWheelSync(event, sourceIndex) {
   else if (sourceType === 'epub' && targetType === 'markdown') {
     const targetContainer = target?.$el?.querySelector?.('.reader-view')
     if (targetContainer) {
-      const scrollAmount = settingsStore.scrollAmounts[1 - sourceIndex] || 100
-      const direction = event.deltaY > 0 ? 1 : -1
+      const scrollAmount = getScrollAmountForType('markdown', 1 - sourceIndex)
       targetContainer.scrollBy({
         top: direction * scrollAmount * settingsStore.syncSensitivity,
         behavior: 'smooth'
@@ -375,49 +378,40 @@ function handleWheelSync(event, sourceIndex) {
   }
   // Markdown-PDF: Markdownをスクロール、PDFでページ移動
   else if (sourceType === 'markdown' && targetType === 'pdf') {
-    const pageAmount = settingsStore.pdfPageAmounts[1 - sourceIndex] || 1
-    if (event.deltaY > 0) {
-      target?.pageBy?.(pageAmount)
-    } else if (event.deltaY < 0) {
-      target?.pageBy?.(-pageAmount)
-    }
+    const pageAmount = getPdfPageAmount(1 - sourceIndex)
+    target?.pageBy?.(direction * pageAmount)
   }
   // PDF-Markdown: PDFでページ移動、Markdownをスクロール
   else if (sourceType === 'pdf' && targetType === 'markdown') {
     const targetContainer = target?.$el?.querySelector?.('.reader-view')
     if (targetContainer) {
-      const scrollAmount = settingsStore.scrollAmounts[1 - sourceIndex] || 100
-      const direction = event.deltaY > 0 ? 1 : -1
+      const scrollAmount = getScrollAmountForType('markdown', 1 - sourceIndex)
       targetContainer.scrollBy({
         top: direction * scrollAmount * settingsStore.syncSensitivity,
         behavior: 'smooth'
       })
     }
   }
-  // URL-URL: 両方のiframeをスクロール（.reader-viewのホイールイベントからscrollByを呼び出す）
+  // URL-URL: 両方のiframeをスクロール（vh単位対応）
   else if (sourceType === 'url' && targetType === 'url') {
-    // ソースペインのスクロール
-    const sourceScrollAmount = settingsStore.scrollAmounts[sourceIndex] || 100
-    const sourceDirection = event.deltaY > 0 ? 1 : -1
-    source?.scrollBy?.(sourceDirection * sourceScrollAmount)
-    
+    // ソースペインのスクロール (calculateScrollDistanceを使用)
+    const sourceScrollAmount = source?.calculateScrollDistance?.() || 100
+    source?.scrollBy?.(direction * sourceScrollAmount)
+
     // ターゲットペインのスクロール
-    const targetScrollAmount = settingsStore.scrollAmounts[1 - sourceIndex] || 100
-    const targetDirection = event.deltaY > 0 ? 1 : -1
-    target?.scrollBy?.(targetDirection * targetScrollAmount * settingsStore.syncSensitivity)
+    const targetScrollAmount = target?.calculateScrollDistance?.() || 100
+    target?.scrollBy?.(direction * targetScrollAmount * settingsStore.syncSensitivity)
   }
   // URL-EPUB: URLをスクロール、EPUBをスクロール
   else if (sourceType === 'url' && targetType === 'epub') {
     // ソースペイン（URL）のスクロール
-    const sourceScrollAmount = settingsStore.scrollAmounts[sourceIndex] || 100
-    const sourceDirection = event.deltaY > 0 ? 1 : -1
-    source?.scrollBy?.(sourceDirection * sourceScrollAmount)
-    
+    const sourceScrollAmount = source?.calculateScrollDistance?.() || 100
+    source?.scrollBy?.(direction * sourceScrollAmount)
+
     // ターゲットペイン（EPUB）のスクロール
     const targetContainer = target?.$el?.querySelector?.(`.epub-content-${1 - sourceIndex}`)
     if (targetContainer) {
-      const scrollAmount = settingsStore.scrollAmounts[1 - sourceIndex] || 100
-      const direction = event.deltaY > 0 ? 1 : -1
+      const scrollAmount = getScrollAmountForType('epub', 1 - sourceIndex)
       targetContainer.scrollBy({
         top: direction * scrollAmount * settingsStore.syncSensitivity,
         behavior: 'smooth'
@@ -427,22 +421,19 @@ function handleWheelSync(event, sourceIndex) {
   // EPUB-URL: EPUBをスクロール、URLをスクロール
   else if (sourceType === 'epub' && targetType === 'url') {
     // ターゲットペイン（URL）のスクロール
-    const scrollAmount = settingsStore.scrollAmounts[1 - sourceIndex] || 100
-    const direction = event.deltaY > 0 ? 1 : -1
+    const scrollAmount = target?.calculateScrollDistance?.() || 100
     target?.scrollBy?.(direction * scrollAmount * settingsStore.syncSensitivity)
   }
   // URL-Markdown: URLをスクロール、Markdownをスクロール
   else if (sourceType === 'url' && targetType === 'markdown') {
     // ソースペイン（URL）のスクロール
-    const sourceScrollAmount = settingsStore.scrollAmounts[sourceIndex] || 100
-    const sourceDirection = event.deltaY > 0 ? 1 : -1
-    source?.scrollBy?.(sourceDirection * sourceScrollAmount)
-    
+    const sourceScrollAmount = source?.calculateScrollDistance?.() || 100
+    source?.scrollBy?.(direction * sourceScrollAmount)
+
     // ターゲットペイン（Markdown）のスクロール
     const targetContainer = target?.$el?.querySelector?.('.reader-view')
     if (targetContainer) {
-      const scrollAmount = settingsStore.scrollAmounts[1 - sourceIndex] || 100
-      const direction = event.deltaY > 0 ? 1 : -1
+      const scrollAmount = getScrollAmountForType('markdown', 1 - sourceIndex)
       targetContainer.scrollBy({
         top: direction * scrollAmount * settingsStore.syncSensitivity,
         behavior: 'smooth'
@@ -452,30 +443,23 @@ function handleWheelSync(event, sourceIndex) {
   // Markdown-URL: Markdownをスクロール、URLをスクロール
   else if (sourceType === 'markdown' && targetType === 'url') {
     // ターゲットペイン（URL）のスクロール
-    const scrollAmount = settingsStore.scrollAmounts[1 - sourceIndex] || 100
-    const direction = event.deltaY > 0 ? 1 : -1
+    const scrollAmount = target?.calculateScrollDistance?.() || 100
     target?.scrollBy?.(direction * scrollAmount * settingsStore.syncSensitivity)
   }
   // URL-PDF: URLをスクロール、PDFでページ移動
   else if (sourceType === 'url' && targetType === 'pdf') {
     // ソースペイン（URL）のスクロール
-    const sourceScrollAmount = settingsStore.scrollAmounts[sourceIndex] || 100
-    const sourceDirection = event.deltaY > 0 ? 1 : -1
-    source?.scrollBy?.(sourceDirection * sourceScrollAmount)
-    
+    const sourceScrollAmount = source?.calculateScrollDistance?.() || 100
+    source?.scrollBy?.(direction * sourceScrollAmount)
+
     // ターゲットペイン（PDF）のページ移動
-    const pageAmount = settingsStore.pdfPageAmounts[1 - sourceIndex] || 1
-    if (event.deltaY > 0) {
-      target?.pageBy?.(pageAmount)
-    } else if (event.deltaY < 0) {
-      target?.pageBy?.(-pageAmount)
-    }
+    const pageAmount = getPdfPageAmount(1 - sourceIndex)
+    target?.pageBy?.(direction * pageAmount)
   }
   // PDF-URL: PDFでページ移動、URLをスクロール
   else if (sourceType === 'pdf' && targetType === 'url') {
     // ターゲットペイン（URL）のスクロール
-    const scrollAmount = settingsStore.scrollAmounts[1 - sourceIndex] || 100
-    const direction = event.deltaY > 0 ? 1 : -1
+    const scrollAmount = target?.calculateScrollDistance?.() || 100
     target?.scrollBy?.(direction * scrollAmount * settingsStore.syncSensitivity)
   }
 
@@ -623,34 +607,43 @@ function handleKeyDown(event) {
   // Up/Down arrows: scroll for EPUB/Markdown/URL, page navigation for PDF
   else if (event.key === 'ArrowUp' || event.key === 'ArrowDown') {
     event.preventDefault()
-    const scrollAmount1 = settingsStore.scrollAmounts[0] // EPUB/Markdown/URL scroll pixels
-    const scrollAmount2 = settingsStore.scrollAmounts[1]
-    const pageAmount1 = settingsStore.pdfPageAmounts[0] // PDF pages
-    const pageAmount2 = settingsStore.pdfPageAmounts[1]
 
-    if (event.key === 'ArrowUp') {
-      // EPUB/Markdown/URL: scroll up, PDF: previous pages
-      if (fileType1 === 'epub' || fileType1 === 'markdown' || fileType1 === 'url') {
-        reader1.value?.scrollBy?.(-scrollAmount1)
+    // Get scroll/page amounts using file-type-specific settings
+    const getScrollAmount = (fileType, paneIdx) => {
+      const targetRef = paneIdx === 0 ? reader1.value : reader2.value
+      if (targetRef?.calculateScrollDistance) {
+        return targetRef.calculateScrollDistance()
       }
-      if (fileType1 === 'pdf') reader1.value?.pageBy?.(-pageAmount1)
-      if (settingsStore.syncMode && bothFilesOpen) {
-        if (fileType2 === 'epub' || fileType2 === 'markdown' || fileType2 === 'url') {
-          reader2.value?.scrollBy?.(-scrollAmount2)
-        }
-        if (fileType2 === 'pdf') reader2.value?.pageBy?.(-pageAmount2)
+      const settings = settingsStore.getScrollSettingsForType(fileType, paneIdx)
+      return settings.amount
+    }
+
+    const getPageAmount = (paneIdx) => {
+      const settings = settingsStore.pdfScrollSettings[paneIdx] || { amount: 1, unit: 'page' }
+      return settings.amount
+    }
+
+    const direction = event.key === 'ArrowUp' ? -1 : 1
+
+    // Pane 1
+    if (fileType1 === 'epub' || fileType1 === 'markdown' || fileType1 === 'url') {
+      const scrollAmount = getScrollAmount(fileType1, 0)
+      reader1.value?.scrollBy?.(direction * scrollAmount)
+    }
+    if (fileType1 === 'pdf') {
+      const pageAmount = getPageAmount(0)
+      reader1.value?.pageBy?.(direction * pageAmount)
+    }
+
+    // Pane 2 (sync mode)
+    if (settingsStore.syncMode && bothFilesOpen) {
+      if (fileType2 === 'epub' || fileType2 === 'markdown' || fileType2 === 'url') {
+        const scrollAmount = getScrollAmount(fileType2, 1)
+        reader2.value?.scrollBy?.(direction * scrollAmount)
       }
-    } else {
-      // EPUB/Markdown/URL: scroll down, PDF: next pages
-      if (fileType1 === 'epub' || fileType1 === 'markdown' || fileType1 === 'url') {
-        reader1.value?.scrollBy?.(scrollAmount1)
-      }
-      if (fileType1 === 'pdf') reader1.value?.pageBy?.(pageAmount1)
-      if (settingsStore.syncMode && bothFilesOpen) {
-        if (fileType2 === 'epub' || fileType2 === 'markdown' || fileType2 === 'url') {
-          reader2.value?.scrollBy?.(scrollAmount2)
-        }
-        if (fileType2 === 'pdf') reader2.value?.pageBy?.(pageAmount2)
+      if (fileType2 === 'pdf') {
+        const pageAmount = getPageAmount(1)
+        reader2.value?.pageBy?.(direction * pageAmount)
       }
     }
   }
