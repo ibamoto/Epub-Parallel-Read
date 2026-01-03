@@ -495,6 +495,13 @@ defineExpose({
     else if (type === "markdown") markdownReader.scrollBy?.(distance);
     else if (type === "url") webReader.scrollBy?.(distance);
   },
+  calculateScrollDistance: () => {
+    const type = readerStore.fileTypes[props.paneIndex];
+    if (type === "epub") return epubReader.calculateScrollDistance?.();
+    else if (type === "markdown") return markdownReader.calculateScrollDistance?.();
+    else if (type === "url") return webReader.calculateScrollDistance?.();
+    return 100; // default
+  },
   pageBy: (pages) => pdfReader.goToPage?.(pdfReader.currentPage.value + pages),
   applySettings: () => {
     const type = readerStore.fileTypes[props.paneIndex];
