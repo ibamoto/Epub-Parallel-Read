@@ -589,19 +589,39 @@ export function useWebReader(paneIndex) {
           }
         })
     } else {
-      // electronAPIが利用できない場合、postMessageを使用
-      try {
-        const targetOrigin = getTargetOrigin()
-        iframe.contentWindow.postMessage({
-          type: 'PARALLEL_READ_FONT_SIZE',
-          action: 'apply-font-size',
-          fontSize: size
-        }, targetOrigin)
-        console.log('WebReader.applyFontSize: postMessage sent')
-      } catch (postError) {
-        console.error('WebReader.applyFontSize: postMessage failed:', postError)
-      }
+      // electronAPIが利用できない場合、フォールバックを使用
+      applyFontSizeFallback(size)
     }
+  }
+
+  // Fallback function to apply font size using CSS transform on the iframe element
+  // This works for cross-origin iframes where we cannot access the document
+  function applyFontSizeFallback(size) {
+    if (!iframe) {
+      console.warn('Cannot apply font size fallback: iframe not ready')
+      return
+    }
+
+    console.log('WebReader.applyFontSizeFallback: applying transform scale', size)
+
+    const zoomLevel = size / 100
+
+    // Use CSS transform to scale the iframe content
+    // transform: scale() is more widely supported than zoom
+    iframe.style.transform = `scale(${zoomLevel})`
+    iframe.style.transformOrigin = 'top left'
+
+    // Adjust iframe size to compensate for transform scale
+    // This ensures the iframe still fills its container
+    if (zoomLevel !== 1) {
+      iframe.style.width = `${100 / zoomLevel}%`
+      iframe.style.height = `${100 / zoomLevel}%`
+    } else {
+      iframe.style.width = '100%'
+      iframe.style.height = '100%'
+    }
+
+    console.log(`Font size fallback applied: ${size}% (scale: ${zoomLevel})`)
   }
 
   // Helper function to apply font size to document
