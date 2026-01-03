@@ -391,6 +391,7 @@
 
   // Setup wheel event listener to forward wheel events to parent for sync
   // This allows the parent window to sync scroll between panes
+  // Use capture phase to ensure we get the event before the page can stop propagation
   let wheelThrottleTimer = null;
   window.addEventListener('wheel', (event) => {
     // Throttle wheel events to avoid overwhelming the parent
@@ -413,7 +414,7 @@
         // Ignore errors if parent is not accessible
       }
     }
-  }, { passive: true });
+  }, { passive: true, capture: true });
 
   // Notify background script that content script is ready
   chrome.runtime.sendMessage({
