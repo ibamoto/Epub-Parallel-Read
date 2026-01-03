@@ -254,35 +254,37 @@ export function useWebReader(paneIndex) {
     const scrollAmount = calculateScrollDistance()
     console.log('WebReader.next: scrolling down by', scrollAmount, 'px')
 
-    // クロスオリジン制限により、直接iframe内のscrollByにアクセスできない
-    // ElectronのIPC経由で拡張機能のコンテンツスクリプトを使用してスクロールを実行
-    try {
-      const iframeWindow = iframe.contentWindow
+    const targetOrigin = getTargetOrigin()
+    const isSameOrigin =
+      targetOrigin !== '*' &&
+      targetOrigin !== 'null' &&
+      targetOrigin === window.location.origin
 
-      // まず直接スクロールを試行（同じオリジンの場合）
-      iframeWindow.scrollBy({
-        top: scrollAmount,
-        behavior: 'smooth',
-      })
-      console.log('WebReader.next: scrollBy executed successfully (direct)')
-    } catch (e) {
-      // クロスオリジン制限により直接スクロールできない場合
-      console.warn('WebReader.next: direct scroll failed, trying Electron IPC method:', e.message)
-
-      // ElectronのIPC経由でiframeのwebContentsに対してスクロールを実行
-      // 拡張機能のコンテンツスクリプトはiframe内で実行されるため、クロスオリジン制限を回避できる
-      if (typeof window !== 'undefined' && window.electronAPI) {
-        const iframeId = iframe.id || `web-reader-iframe-${paneIndex}`
-        window.electronAPI.scrollIframe(iframeId, scrollAmount)
-          .then(result => {
-            console.log('WebReader.next: Electron IPC scroll result:', result)
-          })
-          .catch(err => {
-            console.error('WebReader.next: Electron IPC scroll failed:', err)
-          })
-      } else {
-        console.warn('WebReader.next: electronAPI not available')
+    // 同一オリジンの場合は直接スクロール
+    if (isSameOrigin) {
+      try {
+        iframe.contentWindow.scrollBy({
+          top: scrollAmount,
+          behavior: 'smooth',
+        })
+        console.log('WebReader.next: scrollBy executed successfully (direct)')
+        return
+      } catch (e) {
+        console.warn('WebReader.next: direct scroll failed:', e.message)
       }
+    }
+
+    // クロスオリジンの場合はpostMessageを使用
+    // content.jsでPARALLEL_READ_SCROLLメッセージを処理
+    try {
+      iframe.contentWindow.postMessage({
+        type: 'PARALLEL_READ_SCROLL',
+        action: 'scroll-by',
+        distance: scrollAmount
+      }, targetOrigin)
+      console.log('WebReader.next: postMessage sent')
+    } catch (postError) {
+      console.error('WebReader.next: postMessage failed:', postError)
     }
   }
 
@@ -310,48 +312,37 @@ export function useWebReader(paneIndex) {
     const scrollAmount = calculateScrollDistance()
     console.log('WebReader.prev: scrolling up by', scrollAmount, 'px')
 
-    // クロスオリジン制限により、直接iframe内のscrollByにアクセスできない
-    // ElectronのIPC経由で拡張機能のコンテンツスクリプトを使用してスクロールを実行
-    try {
-      const iframeWindow = iframe.contentWindow
+    const targetOrigin = getTargetOrigin()
+    const isSameOrigin =
+      targetOrigin !== '*' &&
+      targetOrigin !== 'null' &&
+      targetOrigin === window.location.origin
 
-      // まず直接スクロールを試行（同じオリジンの場合）
-      iframeWindow.scrollBy({
-        top: -scrollAmount,
-        behavior: 'smooth',
-      })
-      console.log('WebReader.prev: scrollBy executed successfully (direct)')
-    } catch (e) {
-      // クロスオリジン制限により直接スクロールできない場合
-      console.warn('WebReader.prev: direct scroll failed, trying Electron IPC method:', e.message)
-
-      // クロスオリジン制限により直接スクロールできない場合
-      // postMessageを使用してiframe内の拡張機能コンテンツスクリプトにメッセージを送信
-      // コンテンツスクリプトはiframe内で実行されているため、クロスオリジン制限を回避できる
+    // 同一オリジンの場合は直接スクロール
+    if (isSameOrigin) {
       try {
-        console.log('WebReader.prev: trying postMessage to iframe')
-        const targetOrigin = getTargetOrigin()
-        iframe.contentWindow.postMessage({
-          type: 'PARALLEL_READ_SCROLL',
-          action: 'scroll-by',
-          distance: -scrollAmount
-        }, targetOrigin)
-        console.log('WebReader.prev: postMessage sent')
-      } catch (postError) {
-        console.error('WebReader.prev: postMessage failed:', postError)
-
-        // フォールバック: Electron IPC経由でスクロールを試行
-        if (typeof window !== 'undefined' && window.electronAPI) {
-          const iframeId = iframe.id || `web-reader-iframe-${paneIndex}`
-          window.electronAPI.scrollIframe(iframeId, -scrollAmount)
-            .then(result => {
-              console.log('WebReader.prev: Electron IPC scroll result:', result)
-            })
-            .catch(err => {
-              console.error('WebReader.prev: Electron IPC scroll failed:', err)
-            })
-        }
+        iframe.contentWindow.scrollBy({
+          top: -scrollAmount,
+          behavior: 'smooth',
+        })
+        console.log('WebReader.prev: scrollBy executed successfully (direct)')
+        return
+      } catch (e) {
+        console.warn('WebReader.prev: direct scroll failed:', e.message)
       }
+    }
+
+    // クロスオリジンの場合はpostMessageを使用
+    // content.jsでPARALLEL_READ_SCROLLメッセージを処理
+    try {
+      iframe.contentWindow.postMessage({
+        type: 'PARALLEL_READ_SCROLL',
+        action: 'scroll-by',
+        distance: -scrollAmount
+      }, targetOrigin)
+      console.log('WebReader.prev: postMessage sent')
+    } catch (postError) {
+      console.error('WebReader.prev: postMessage failed:', postError)
     }
   }
 
@@ -490,30 +481,34 @@ export function useWebReader(paneIndex) {
       actualDistance = (distance > 0 ? 1 : -1) * calculateScrollDistance()
     }
 
-    try {
-      const iframeWindow = iframe.contentWindow
+    const targetOrigin = getTargetOrigin()
+    const isSameOrigin =
+      targetOrigin !== '*' &&
+      targetOrigin !== 'null' &&
+      targetOrigin === window.location.origin
 
-      // webSecurity: falseが設定されているため、クロスオリジン制限は緩和されている
-      // 直接scrollByを試行
-      iframeWindow.scrollBy({
-        top: actualDistance,
-        behavior: 'smooth',
-      })
-    } catch (error) {
-      // Cross-origin restriction - postMessage経由でスクロール
+    // 同一オリジンの場合は直接スクロール
+    if (isSameOrigin) {
       try {
-        iframe.contentWindow.postMessage({
-          type: 'PARALLEL_READ_SCROLL',
-          action: 'scroll-by',
-          distance: actualDistance
-        }, '*')
-      } catch (postError) {
-        // Fallback to Electron IPC
-        if (typeof window !== 'undefined' && window.electronAPI) {
-          const iframeId = iframe.id || `web-reader-iframe-${paneIndex}`
-          window.electronAPI.scrollIframe(iframeId, actualDistance)
-        }
+        iframe.contentWindow.scrollBy({
+          top: actualDistance,
+          behavior: 'smooth',
+        })
+        return
+      } catch (error) {
+        console.warn('scrollBy: direct scroll failed:', error.message)
       }
+    }
+
+    // クロスオリジンの場合はpostMessageを使用
+    try {
+      iframe.contentWindow.postMessage({
+        type: 'PARALLEL_READ_SCROLL',
+        action: 'scroll-by',
+        distance: actualDistance
+      }, targetOrigin)
+    } catch (postError) {
+      console.error('scrollBy: postMessage failed:', postError)
     }
   }
 

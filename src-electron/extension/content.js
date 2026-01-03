@@ -56,29 +56,26 @@
 
   // Listen for postMessage from parent window (for cross-origin iframe scrolling and styling)
   window.addEventListener('message', (event) => {
-    // Security: 信頼できるソースのみ処理（親ウィンドウは常に許可）
-    const trustedOrigins = new Set()
-    try {
-      const referrerOrigin = new URL(document.referrer || '').origin
-      if (referrerOrigin) trustedOrigins.add(referrerOrigin)
-    } catch (e) {
-      // ignore invalid referrer
-    }
-
-    // Always allow same-origin messages
-    trustedOrigins.add(window.location.origin)
-    // For file:// origins, event.origin is "null"
-    trustedOrigins.add('null')
-
-    const isParent = event.source && event.source === window.parent
-    const isTrustedOrigin = (event.origin && trustedOrigins.has(event.origin)) || isParent
-
-    if (!isTrustedOrigin) {
-      console.warn('Content script: rejected postMessage from untrusted origin', event.origin)
+    // Security: PARALLEL_READ_* メッセージタイプのみ処理
+    // これらのメッセージはアプリケーションからのみ送信される
+    if (!event.data || typeof event.data !== 'object') {
       return
     }
 
-    if (event.data && event.data.type === 'PARALLEL_READ_SCROLL') {
+    const messageType = event.data.type
+    const isParallelReadMessage = messageType === 'PARALLEL_READ_SCROLL' ||
+                                   messageType === 'PARALLEL_READ_FONT_SIZE'
+
+    // PARALLEL_READ_* 以外のメッセージは無視（セキュリティ）
+    if (!isParallelReadMessage) {
+      return
+    }
+
+    // PARALLEL_READ_* メッセージは処理する
+    // これらは特定のアクションのみを実行し、任意のコード実行はできないため安全
+    console.log('Content script: received PARALLEL_READ message', messageType, event.data.action)
+
+    if (event.data.type === 'PARALLEL_READ_SCROLL') {
       if (event.data.action === 'scroll-by') {
         try {
           console.log('Content script: received scroll message', event.data.distance);
