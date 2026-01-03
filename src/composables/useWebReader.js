@@ -563,10 +563,14 @@ export function useWebReader(paneIndex) {
     }
 
     // クロスオリジン制限により、直接iframe内のdocumentにアクセスできない
-    // Electron IPC経由で拡張機能のコンテンツスクリプトを使用してフォントサイズを適用
-    // 直接アクセスは試行しない（常にクロスオリジン制限で失敗するため）
-    
-    // Electron IPC経由で拡張機能のコンテンツスクリプトを使用
+    // まずCSS transformフォールバックを適用（確実に動作する）
+    // その後、Electron IPC経由でpostMessageを送信（content scriptがあればより良い結果になる）
+
+    // 常にフォールバックを最初に適用（確実に動作）
+    applyFontSizeFallback(size)
+
+    // 追加でElectron IPC経由でcontent scriptへの適用を試みる
+    // content scriptが正しく動作すれば、より良いフォントサイズ適用になる
     if (typeof window !== 'undefined' && window.electronAPI) {
       const iframeId = iframe.id || `web-reader-iframe-${paneIndex}`
       window.electronAPI.applyIframeFontSize(iframeId, size)
@@ -574,23 +578,8 @@ export function useWebReader(paneIndex) {
           console.log('WebReader.applyFontSize: Electron IPC result:', result)
         })
         .catch(err => {
-          console.error('WebReader.applyFontSize: Electron IPC failed:', err)
-          // フォールバック: postMessageを使用
-          try {
-            iframe.contentWindow.postMessage({
-              type: 'PARALLEL_READ_FONT_SIZE',
-              action: 'apply-font-size',
-              fontSize: size
-            }, targetOrigin)
-            console.log('WebReader.applyFontSize: postMessage sent (fallback)')
-          } catch (postError) {
-            console.error('WebReader.applyFontSize: postMessage failed:', postError)
-            applyFontSizeFallback(size)
-          }
+          console.log('WebReader.applyFontSize: Electron IPC failed (fallback already applied):', err.message)
         })
-    } else {
-      // electronAPIが利用できない場合、フォールバックを使用
-      applyFontSizeFallback(size)
     }
   }
 
