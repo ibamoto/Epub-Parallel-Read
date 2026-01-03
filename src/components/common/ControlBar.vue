@@ -114,25 +114,33 @@
 
       <!-- Left Pane Settings -->
       <div class="pane-settings" v-if="readerStore.fileTypes[0]">
+        <!-- URL: vh unit -->
         <div
           class="scroll-amount-control"
-          v-if="
-            readerStore.fileTypes[0] === 'epub' ||
-            readerStore.fileTypes[0] === 'markdown' ||
-            readerStore.fileTypes[0] === 'url'
-          "
-          :title="
-            readerStore.fileTypes[0] === 'epub'
-              ? '左ペインのスクロール量 (px)'
-              : readerStore.fileTypes[0] === 'markdown'
-              ? '左ペインのスクロール量 (px)'
-              : '左ペインのスクロール量 (px)'
-          "
+          v-if="readerStore.fileTypes[0] === 'url'"
+          title="左ペインのスクロール量 (vh)"
         >
           <input
             type="number"
-            :value="settingsStore.scrollAmounts[0]"
-            @input="updateScrollAmount(0, $event)"
+            :value="settingsStore.urlScrollSettings[0]?.amount ?? 50"
+            @input="updateUrlScrollAmount(0, $event)"
+            @keydown="preventInvalidInput($event, 1, 100)"
+            min="1"
+            max="100"
+            step="5"
+          />
+          <span class="unit">vh</span>
+        </div>
+        <!-- EPUB: px unit -->
+        <div
+          class="scroll-amount-control"
+          v-if="readerStore.fileTypes[0] === 'epub'"
+          title="左ペインのスクロール量 (px)"
+        >
+          <input
+            type="number"
+            :value="settingsStore.epubScrollSettings[0]?.amount ?? 100"
+            @input="updateEpubScrollAmount(0, $event)"
             @keydown="preventInvalidInput($event, 10, 1000)"
             min="10"
             max="1000"
@@ -140,6 +148,24 @@
           />
           <span class="unit">px</span>
         </div>
+        <!-- Markdown: px unit -->
+        <div
+          class="scroll-amount-control"
+          v-if="readerStore.fileTypes[0] === 'markdown'"
+          title="左ペインのスクロール量 (px)"
+        >
+          <input
+            type="number"
+            :value="settingsStore.markdownScrollSettings[0]?.amount ?? 100"
+            @input="updateMarkdownScrollAmount(0, $event)"
+            @keydown="preventInvalidInput($event, 10, 1000)"
+            min="10"
+            max="1000"
+            step="10"
+          />
+          <span class="unit">px</span>
+        </div>
+        <!-- PDF: page unit -->
         <div
           class="scroll-amount-control"
           v-if="readerStore.fileTypes[0] === 'pdf'"
@@ -147,8 +173,8 @@
         >
           <input
             type="number"
-            :value="settingsStore.pdfPageAmounts[0]"
-            @input="updatePdfPageAmount(0, $event)"
+            :value="settingsStore.pdfScrollSettings[0]?.amount ?? 1"
+            @input="updatePdfScrollAmount(0, $event)"
             @keydown="preventInvalidInput($event, 1, 100)"
             min="1"
             max="100"
@@ -160,6 +186,7 @@
 
       <!-- Right Pane Settings -->
       <div class="pane-settings right" v-if="readerStore.fileTypes[1]">
+        <!-- PDF: page unit -->
         <div
           class="scroll-amount-control"
           v-if="readerStore.fileTypes[1] === 'pdf'"
@@ -167,8 +194,8 @@
         >
           <input
             type="number"
-            :value="settingsStore.pdfPageAmounts[1]"
-            @input="updatePdfPageAmount(1, $event)"
+            :value="settingsStore.pdfScrollSettings[1]?.amount ?? 1"
+            @input="updatePdfScrollAmount(1, $event)"
             @keydown="preventInvalidInput($event, 1, 100)"
             min="1"
             max="100"
@@ -176,25 +203,50 @@
           />
           <span class="unit">ページ</span>
         </div>
+        <!-- URL: vh unit -->
         <div
           class="scroll-amount-control"
-          v-if="
-            readerStore.fileTypes[1] === 'epub' ||
-            readerStore.fileTypes[1] === 'markdown' ||
-            readerStore.fileTypes[1] === 'url'
-          "
-          :title="
-            readerStore.fileTypes[1] === 'epub'
-              ? '右ペインのスクロール量 (px)'
-              : readerStore.fileTypes[1] === 'markdown'
-              ? '右ペインのスクロール量 (px)'
-              : '右ペインのスクロール量 (px)'
-          "
+          v-if="readerStore.fileTypes[1] === 'url'"
+          title="右ペインのスクロール量 (vh)"
         >
           <input
             type="number"
-            :value="settingsStore.scrollAmounts[1]"
-            @input="updateScrollAmount(1, $event)"
+            :value="settingsStore.urlScrollSettings[1]?.amount ?? 50"
+            @input="updateUrlScrollAmount(1, $event)"
+            @keydown="preventInvalidInput($event, 1, 100)"
+            min="1"
+            max="100"
+            step="5"
+          />
+          <span class="unit">vh</span>
+        </div>
+        <!-- EPUB: px unit -->
+        <div
+          class="scroll-amount-control"
+          v-if="readerStore.fileTypes[1] === 'epub'"
+          title="右ペインのスクロール量 (px)"
+        >
+          <input
+            type="number"
+            :value="settingsStore.epubScrollSettings[1]?.amount ?? 100"
+            @input="updateEpubScrollAmount(1, $event)"
+            @keydown="preventInvalidInput($event, 10, 1000)"
+            min="10"
+            max="1000"
+            step="10"
+          />
+          <span class="unit">px</span>
+        </div>
+        <!-- Markdown: px unit -->
+        <div
+          class="scroll-amount-control"
+          v-if="readerStore.fileTypes[1] === 'markdown'"
+          title="右ペインのスクロール量 (px)"
+        >
+          <input
+            type="number"
+            :value="settingsStore.markdownScrollSettings[1]?.amount ?? 100"
+            @input="updateMarkdownScrollAmount(1, $event)"
             @keydown="preventInvalidInput($event, 10, 1000)"
             min="10"
             max="1000"
@@ -537,28 +589,48 @@ function preventInvalidInput(event, min, max) {
   }
 }
 
-// Update scroll amount
-function updateScrollAmount(paneIndex, event) {
+// Update URL scroll amount (vh unit, 1-100)
+function updateUrlScrollAmount(paneIndex, event) {
   const value = parseInt(event.target.value, 10);
   if (!isNaN(value)) {
-    // Clamp value to valid range
-    const clampedValue = Math.max(10, Math.min(1000, value));
-    settingsStore.setScrollAmount(paneIndex, clampedValue);
-    // Update input value to clamped value if it was out of range
+    const clampedValue = Math.max(1, Math.min(100, value));
+    settingsStore.setUrlScrollSettings(paneIndex, clampedValue, 'vh');
     if (value !== clampedValue) {
       event.target.value = clampedValue;
     }
   }
 }
 
-// Update PDF page amount
-function updatePdfPageAmount(paneIndex, event) {
+// Update EPUB scroll amount (px unit, 10-1000)
+function updateEpubScrollAmount(paneIndex, event) {
   const value = parseInt(event.target.value, 10);
   if (!isNaN(value)) {
-    // Clamp value to valid range
+    const clampedValue = Math.max(10, Math.min(1000, value));
+    settingsStore.setEpubScrollSettings(paneIndex, clampedValue, 'px');
+    if (value !== clampedValue) {
+      event.target.value = clampedValue;
+    }
+  }
+}
+
+// Update Markdown scroll amount (px unit, 10-1000)
+function updateMarkdownScrollAmount(paneIndex, event) {
+  const value = parseInt(event.target.value, 10);
+  if (!isNaN(value)) {
+    const clampedValue = Math.max(10, Math.min(1000, value));
+    settingsStore.setMarkdownScrollSettings(paneIndex, clampedValue, 'px');
+    if (value !== clampedValue) {
+      event.target.value = clampedValue;
+    }
+  }
+}
+
+// Update PDF scroll amount (page unit, 1-100)
+function updatePdfScrollAmount(paneIndex, event) {
+  const value = parseInt(event.target.value, 10);
+  if (!isNaN(value)) {
     const clampedValue = Math.max(1, Math.min(100, value));
-    settingsStore.setPdfPageAmount(paneIndex, clampedValue);
-    // Update input value to clamped value if it was out of range
+    settingsStore.setPdfScrollSettings(paneIndex, clampedValue, 'page');
     if (value !== clampedValue) {
       event.target.value = clampedValue;
     }
