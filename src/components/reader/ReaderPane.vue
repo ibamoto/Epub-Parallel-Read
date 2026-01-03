@@ -67,8 +67,9 @@
       </div>
     </div>
 
-    <!-- Navigation Buttons -->
+    <!-- Navigation Buttons (hidden when unified navigation is shown) -->
     <div
+      v-if="!props.hideNavigation"
       class="navigation-group"
       :class="[position, { 'url-mode': isUrlMode }]"
     >
@@ -133,6 +134,10 @@ const props = defineProps({
   position: {
     type: String,
     default: "left",
+  },
+  hideNavigation: {
+    type: Boolean,
+    default: false,
   },
 });
 

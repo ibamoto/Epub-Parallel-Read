@@ -16,6 +16,7 @@
         :paneIndex="0"
         position="left"
         :style="{ width: `${readerStore.leftPaneWidth}%` }"
+        :hideNavigation="showUnifiedNavigation"
         @navigate="handleNavigate"
       />
 
@@ -29,8 +30,46 @@
         :paneIndex="1"
         position="right"
         :style="{ width: `${100 - readerStore.leftPaneWidth}%` }"
+        :hideNavigation="showUnifiedNavigation"
         @navigate="handleNavigate"
       />
+    </div>
+
+    <!-- Unified Navigation Bar (shown when sync mode is ON and both files are open) -->
+    <div v-if="showUnifiedNavigation" class="unified-navigation">
+      <button @click="handleUnifiedPrev" class="nav-btn" title="前へ">
+        <span v-if="bothUrlMode">↑ 上</span>
+        <span v-else>← 前へ</span>
+      </button>
+      <button @click="handleUnifiedNext" class="nav-btn" title="次へ">
+        <span v-if="bothUrlMode">↓ 下</span>
+        <span v-else>次へ →</span>
+      </button>
+
+      <!-- Progress bars for each pane -->
+      <div class="unified-progress-container">
+        <div class="progress-item" v-if="settingsStore.showProgressBar[0]">
+          <span class="progress-label">左</span>
+          <div class="progress-bar" @click="handleProgressClick(0, $event)" ref="progressBar0">
+            <div class="progress-fill" :style="{ width: progressPercent0 + '%' }"></div>
+          </div>
+          <span class="progress-text">{{ Math.round(progressPercent0) }}%</span>
+        </div>
+        <div class="progress-item" v-if="settingsStore.showProgressBar[1]">
+          <span class="progress-label">右</span>
+          <div class="progress-bar" @click="handleProgressClick(1, $event)" ref="progressBar1">
+            <div class="progress-fill" :style="{ width: progressPercent1 + '%' }"></div>
+          </div>
+          <span class="progress-text">{{ Math.round(progressPercent1) }}%</span>
+        </div>
+      </div>
+
+      <!-- File info -->
+      <div class="unified-file-info">
+        <span v-if="readerStore.fileNames[0]" class="file-name left">{{ readerStore.fileNames[0] }}</span>
+        <span class="separator">|</span>
+        <span v-if="readerStore.fileNames[1]" class="file-name right">{{ readerStore.fileNames[1] }}</span>
+      </div>
     </div>
 
     <!-- Global Error Message -->
@@ -67,6 +106,8 @@ const reader2 = ref(null)
 const globalError = ref('')
 const isResizing = ref(false)
 const showSettings = ref(false)
+const progressBar0 = ref(null)
+const progressBar1 = ref(null)
 let isSyncing = false
 let syncTimeout = null
 let keyboardNavLock = false  // Lock to prevent scroll sync during keyboard navigation
@@ -78,6 +119,71 @@ const themeClass = computed(() => ({
   'theme-sepia': settingsStore.theme === 'sepia',
   'theme-light': settingsStore.theme === 'light' || !settingsStore.theme,
 }))
+
+// Show unified navigation when sync mode is ON and both files are open
+const showUnifiedNavigation = computed(() => {
+  return settingsStore.syncMode &&
+         readerStore.fileTypes[0] !== null &&
+         readerStore.fileTypes[1] !== null
+})
+
+// Check if both panes are in URL mode
+const bothUrlMode = computed(() => {
+  return readerStore.fileTypes[0] === 'url' && readerStore.fileTypes[1] === 'url'
+})
+
+// Progress percentages for each pane
+const progressPercent0 = computed(() => {
+  const type = readerStore.fileTypes[0]
+  if (!type) return 0
+  const scrollInfo = reader1.value?.getScrollInfo?.()
+  if (scrollInfo && typeof scrollInfo.scrollRatio === 'number') {
+    return scrollInfo.scrollRatio * 100
+  }
+  return 0
+})
+
+const progressPercent1 = computed(() => {
+  const type = readerStore.fileTypes[1]
+  if (!type) return 0
+  const scrollInfo = reader2.value?.getScrollInfo?.()
+  if (scrollInfo && typeof scrollInfo.scrollRatio === 'number') {
+    return scrollInfo.scrollRatio * 100
+  }
+  return 0
+})
+
+// Unified navigation handlers
+function handleUnifiedPrev() {
+  keyboardNavLock = true
+  reader1.value?.prev?.()
+  reader2.value?.prev?.()
+  setTimeout(() => {
+    keyboardNavLock = false
+  }, 600)
+}
+
+function handleUnifiedNext() {
+  keyboardNavLock = true
+  reader1.value?.next?.()
+  reader2.value?.next?.()
+  setTimeout(() => {
+    keyboardNavLock = false
+  }, 600)
+}
+
+// Handle progress bar click in unified navigation
+function handleProgressClick(paneIndex, event) {
+  const progressBar = paneIndex === 0 ? progressBar0.value : progressBar1.value
+  if (!progressBar) return
+
+  const rect = progressBar.getBoundingClientRect()
+  const clickX = event.clientX - rect.left
+  const ratio = Math.max(0, Math.min(1, clickX / rect.width))
+
+  const reader = paneIndex === 0 ? reader1.value : reader2.value
+  reader?.setScrollByRatio?.(ratio)
+}
 
 // Initialize stores
 onMounted(() => {
@@ -696,7 +802,7 @@ function startResize(e) {
 
     const delta = e.clientX - startX
     const deltaPercent = (delta / containerWidth) * 100
-    const newWidth = Math.max(20, Math.min(80, startWidth + deltaPercent))
+    const newWidth = Math.max(10, Math.min(90, startWidth + deltaPercent))
 
     readerStore.setLeftPaneWidth(newWidth)
   }
@@ -997,6 +1103,100 @@ body,
   line-height: 1;
 }
 
+/* Unified Navigation Bar */
+.unified-navigation {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.75rem;
+  padding: 0.5rem 1rem;
+  background: var(--bg-secondary);
+  border-top: 1px solid var(--border-color);
+  flex-shrink: 0;
+  flex-wrap: wrap;
+}
+
+.unified-navigation .nav-btn {
+  padding: 0.5rem 1rem;
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  cursor: pointer;
+  font-size: 0.9rem;
+  transition: all 0.15s;
+}
+
+.unified-navigation .nav-btn:hover {
+  background: var(--bg-hover);
+  border-color: var(--accent-color);
+}
+
+.unified-progress-container {
+  display: flex;
+  gap: 1rem;
+  align-items: center;
+}
+
+.unified-progress-container .progress-item {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.unified-progress-container .progress-label {
+  font-size: 0.75rem;
+  color: var(--text-tertiary);
+  min-width: 1.5em;
+}
+
+.unified-progress-container .progress-bar {
+  width: 80px;
+  height: 6px;
+  background: var(--border-color);
+  border-radius: 3px;
+  overflow: hidden;
+  cursor: pointer;
+  transition: height 0.15s ease;
+}
+
+.unified-progress-container .progress-bar:hover {
+  height: 10px;
+}
+
+.unified-progress-container .progress-fill {
+  height: 100%;
+  background: var(--accent-color);
+  border-radius: 3px;
+  transition: width 0.15s ease-out;
+}
+
+.unified-progress-container .progress-text {
+  font-size: 0.75rem;
+  color: var(--text-tertiary);
+  min-width: 3em;
+  text-align: right;
+}
+
+.unified-file-info {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.75rem;
+  color: var(--text-tertiary);
+}
+
+.unified-file-info .file-name {
+  max-width: 120px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.unified-file-info .separator {
+  color: var(--border-color);
+}
+
 /* Responsive */
 @media (max-width: 900px) {
   .reader-container {
@@ -1007,6 +1207,16 @@ body,
     width: 100%;
     height: 8px;
     cursor: row-resize;
+  }
+
+  .unified-navigation {
+    flex-direction: column;
+    gap: 0.5rem;
+  }
+
+  .unified-progress-container {
+    flex-direction: column;
+    gap: 0.5rem;
   }
 }
 </style>
