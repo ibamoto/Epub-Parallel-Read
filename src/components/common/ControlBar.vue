@@ -87,6 +87,13 @@
                   class="md-icon"
                   >MD</span
                 >
+                <span
+                  v-else-if="
+                    item.fileType === 'html' || item.fileType === 'htm'
+                  "
+                  class="html-icon"
+                  >HTML</span
+                >
                 <span v-else class="epub-icon">EPUB</span>
               </div>
               <div class="history-item-info">
@@ -297,6 +304,13 @@
                   class="md-icon"
                   >MD</span
                 >
+                <span
+                  v-else-if="
+                    item.fileType === 'html' || item.fileType === 'htm'
+                  "
+                  class="html-icon"
+                  >HTML</span
+                >
                 <span v-else class="epub-icon">EPUB</span>
               </div>
               <div class="history-item-info">
@@ -400,7 +414,7 @@ const {
 } = useFileHistory();
 
 const appVersion = window.appVersion || "2.0.0";
-const acceptTypes = ".epub,.pdf,.md,.markdown,.txt";
+const acceptTypes = ".epub,.pdf,.md,.markdown,.html,.htm,.txt";
 
 // スクロール同期が可能かどうか（2つのファイルが開いている時のみ）
 const canSync = computed(() => {
@@ -1145,6 +1159,32 @@ function handleSyncToggle() {
 .md-icon-label {
   display: inline-block;
   background: #374151;
+  color: white;
+  font-size: 0.7rem;
+  font-weight: 700;
+  padding: 0.25em 0.4em;
+  border-radius: 3px;
+  line-height: 1;
+  letter-spacing: 0.05em;
+  font-family: system-ui, -apple-system, sans-serif;
+}
+
+.html-icon {
+  display: inline-block;
+  background: #e34c26;
+  color: white;
+  font-size: 0.65rem;
+  font-weight: 700;
+  padding: 0.2em 0.35em;
+  border-radius: 3px;
+  line-height: 1;
+  letter-spacing: 0.05em;
+  font-family: system-ui, -apple-system, sans-serif;
+}
+
+.html-icon-label {
+  display: inline-block;
+  background: #e34c26;
   color: white;
   font-size: 0.7rem;
   font-weight: 700;
