@@ -23,8 +23,9 @@
 
     <button
       class="settings-btn"
-      @click="emit('open-settings')"
-      title="表示設定"
+      :class="{ disabled: !canApplySettings }"
+      @click="canApplySettings && emit('open-settings')"
+      :title="canApplySettings ? '表示設定' : '表示設定はEPUB/Markdownのみ有効'"
     >
       <span>Aa</span>
     </button>
@@ -406,6 +407,17 @@ const canSync = computed(() => {
   return readerStore.fileTypes[0] !== null && readerStore.fileTypes[1] !== null;
 });
 
+// Aaボタンが有効かどうか（両方がURLモードの場合は無効）
+const canApplySettings = computed(() => {
+  const type0 = readerStore.fileTypes[0];
+  const type1 = readerStore.fileTypes[1];
+  // 少なくとも1つのペインがEPUB/Markdownの場合は有効
+  // 両方がURL/PDF/nullの場合は無効
+  const hasApplicableType = (type0 === 'epub' || type0 === 'markdown') ||
+                            (type1 === 'epub' || type1 === 'markdown');
+  return hasApplicableType;
+});
+
 // ショートカットの表示文字列を取得
 const syncShortcutLabel = computed(() => {
   const shortcut = settingsStore.syncModeShortcut;
@@ -766,9 +778,16 @@ function handleSyncToggle() {
   font-weight: 600;
 }
 
-.settings-btn:hover {
+.settings-btn:hover:not(.disabled) {
   background: var(--bg-hover);
   border-color: var(--accent-color);
+}
+
+.settings-btn.disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  background: var(--bg-tertiary);
+  color: var(--text-tertiary);
 }
 
 .file-inputs {
