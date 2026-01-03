@@ -126,6 +126,14 @@ onUnmounted(() => {
     }
     wheelHandler1 = null
   }
+  // Remove URL wheel handler
+  if (urlWheelHandler) {
+    const readerContainer = document.querySelector('.reader-container')
+    if (readerContainer) {
+      readerContainer.removeEventListener('wheel', urlWheelHandler, true)
+    }
+    urlWheelHandler = null
+  }
 })
 
 // Handle file selection from control bar
@@ -191,6 +199,7 @@ async function handleUrlOpen(paneIndex, url) {
 // Wheel event handlers (stored for cleanup)
 let wheelHandler0 = null
 let wheelHandler1 = null
+let urlWheelHandler = null // Special handler for URL-URL sync
 
 // Setup wheel event listeners for scroll sync
 function setupWheelSyncListeners() {
@@ -198,12 +207,12 @@ function setupWheelSyncListeners() {
   watch([() => readerStore.fileTypes[0], () => readerStore.fileTypes[1]], (newValues, oldValues) => {
     // 初回実行時は何もしない
     if (!oldValues) return
-    
+
     const hasFile1 = newValues[0] !== null
     const hasFile2 = newValues[1] !== null
     const hadFile1 = oldValues[0] !== null
     const hadFile2 = oldValues[1] !== null
-    
+
     // ファイルが閉じられたとき（両方のファイルが開いていた状態から、片方または両方が閉じられたとき）は自動的にOFFにする
     if ((hadFile1 && hadFile2) && (!hasFile1 || !hasFile2) && settingsStore.syncMode) {
       settingsStore.syncMode = false
@@ -230,33 +239,78 @@ function setupWheelSyncListeners() {
       }
       wheelHandler1 = null
     }
+    // Remove URL wheel handler
+    if (urlWheelHandler) {
+      const readerContainer = document.querySelector('.reader-container')
+      if (readerContainer) {
+        readerContainer.removeEventListener('wheel', urlWheelHandler, true)
+      }
+      urlWheelHandler = null
+    }
 
     // Add new listeners if both files are open and sync mode is on
     const hasFile1 = readerStore.fileTypes[0] !== null
     const hasFile2 = readerStore.fileTypes[1] !== null
-    
+    const fileType1 = readerStore.fileTypes[0]
+    const fileType2 = readerStore.fileTypes[1]
+
     if (hasFile1 && hasFile2 && settingsStore.syncMode) {
       // Wait for DOM to update
       nextTick(() => {
         if (!reader1.value || !reader2.value) return
 
-        // EPUBの場合は.epub-content-{paneIndex}、PDF/Markdown/URLの場合は.reader-viewを探す
-        const container1 = reader1.value.$el?.querySelector?.('.epub-content-0') || 
-                          reader1.value.$el?.querySelector?.('.reader-view')
-        const container2 = reader2.value.$el?.querySelector?.('.epub-content-1') || 
-                          reader2.value.$el?.querySelector?.('.reader-view')
-        
-        if (container1) {
-          wheelHandler0 = (e) => handleWheelSync(e, 0)
-          container1.addEventListener('wheel', wheelHandler0, { passive: true })
-        }
-        if (container2) {
-          wheelHandler1 = (e) => handleWheelSync(e, 1)
-          container2.addEventListener('wheel', wheelHandler1, { passive: true })
+        // URL-URL mode: use capture phase on reader-container to intercept wheel events
+        if (fileType1 === 'url' && fileType2 === 'url') {
+          const readerContainer = document.querySelector('.reader-container')
+          if (readerContainer) {
+            urlWheelHandler = (e) => handleUrlUrlWheelSync(e)
+            // Use capture phase to intercept before iframe gets the event
+            readerContainer.addEventListener('wheel', urlWheelHandler, { capture: true, passive: false })
+          }
+        } else {
+          // Non-URL modes: use existing listeners
+          // EPUBの場合は.epub-content-{paneIndex}、PDF/Markdown/URLの場合は.reader-viewを探す
+          const container1 = reader1.value.$el?.querySelector?.('.epub-content-0') ||
+                            reader1.value.$el?.querySelector?.('.reader-view')
+          const container2 = reader2.value.$el?.querySelector?.('.epub-content-1') ||
+                            reader2.value.$el?.querySelector?.('.reader-view')
+
+          if (container1) {
+            wheelHandler0 = (e) => handleWheelSync(e, 0)
+            container1.addEventListener('wheel', wheelHandler0, { passive: true })
+          }
+          if (container2) {
+            wheelHandler1 = (e) => handleWheelSync(e, 1)
+            container2.addEventListener('wheel', wheelHandler1, { passive: true })
+          }
         }
       })
     }
   }, { immediate: false })
+}
+
+/**
+ * URL-URLモード専用のwheelイベントハンドラ
+ *
+ * キャプチャフェーズでwheelイベントを処理し、
+ * iframeへの自然なスクロールを防いで両方のiframeにスクロールを適用
+ */
+let urlWheelThrottle = null
+function handleUrlUrlWheelSync(event) {
+  // Prevent the wheel event from reaching the iframe
+  event.preventDefault()
+
+  // Throttle to avoid overwhelming the iframes
+  if (urlWheelThrottle) return
+  urlWheelThrottle = setTimeout(() => {
+    urlWheelThrottle = null
+  }, 50)
+
+  const deltaY = event.deltaY
+
+  // Apply scroll to both panes
+  reader1.value?.scrollBy?.(deltaY * settingsStore.syncSensitivity)
+  reader2.value?.scrollBy?.(deltaY * settingsStore.syncSensitivity)
 }
 
 /**
