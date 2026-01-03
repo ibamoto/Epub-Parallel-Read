@@ -123,6 +123,7 @@ import { useSettingsStore } from "../../stores/settings";
 import { useEpubReader } from "../../composables/useEpubReader";
 import { usePdfReader } from "../../composables/usePdfReader";
 import { useMarkdownReader } from "../../composables/useMarkdownReader";
+import { useHtmlReader } from "../../composables/useHtmlReader";
 import { useWebReader } from "../../composables/useWebReader";
 import TableOfContents from "../navigation/TableOfContents.vue";
 
@@ -156,7 +157,7 @@ function handleScroll() {
   updateScrollProgress();
 }
 
-// Update scroll progress for EPUB, Markdown, and URL
+// Update scroll progress for EPUB, Markdown, HTML, and URL
 function updateScrollProgress() {
   const fileType = readerStore.fileTypes[props.paneIndex];
   let scrollInfo = null;
@@ -165,6 +166,8 @@ function updateScrollProgress() {
     scrollInfo = epubReader.getScrollInfo?.();
   } else if (fileType === "markdown") {
     scrollInfo = markdownReader.getScrollInfo?.();
+  } else if (fileType === "html") {
+    scrollInfo = htmlReader.getScrollInfo?.();
   } else if (fileType === "url") {
     scrollInfo = webReader.getScrollInfo?.();
   }
@@ -178,6 +181,7 @@ function updateScrollProgress() {
 const epubReader = useEpubReader(props.paneIndex, handleScroll);
 const pdfReader = usePdfReader(props.paneIndex);
 const markdownReader = useMarkdownReader(props.paneIndex);
+const htmlReader = useHtmlReader(props.paneIndex);
 const webReader = useWebReader(props.paneIndex);
 
 // Current active reader
@@ -186,6 +190,7 @@ const activeReader = computed(() => {
   if (fileType === "epub") return epubReader;
   if (fileType === "pdf") return pdfReader;
   if (fileType === "markdown") return markdownReader;
+  if (fileType === "html") return htmlReader;
   if (fileType === "url") return webReader;
   return null;
 });
@@ -225,6 +230,9 @@ function handleProgressClick(event) {
   } else if (type === "markdown") {
     markdownReader.setScrollByRatio(ratio);
     scrollProgress.value = ratio;
+  } else if (type === "html") {
+    htmlReader.setScrollByRatio(ratio);
+    scrollProgress.value = ratio;
   } else if (type === "url") {
     webReader.setScrollByRatio(ratio);
     const scrollInfo = webReader.getScrollInfo?.();
@@ -259,8 +267,8 @@ const progressPercent = computed(() => {
     if (total <= 1) return 100;
     return ((current - 1) / (total - 1)) * 100;
   }
-  // For EPUB, Markdown, and URL, use scroll progress
-  if (type === "epub" || type === "markdown" || type === "url") {
+  // For EPUB, Markdown, HTML, and URL, use scroll progress
+  if (type === "epub" || type === "markdown" || type === "html" || type === "url") {
     const scrollInfo = activeReader.value?.getScrollInfo?.();
     if (scrollInfo && typeof scrollInfo.scrollRatio === "number") {
       return scrollInfo.scrollRatio * 100;
@@ -281,6 +289,7 @@ onMounted(() => {
     epubReader.containerRef.value = readerView.value;
     pdfReader.containerRef.value = readerView.value;
     markdownReader.containerRef.value = readerView.value;
+    htmlReader.containerRef.value = readerView.value;
     webReader.containerRef.value = readerView.value;
   }
 
@@ -306,6 +315,7 @@ watch(readerView, (newVal) => {
     epubReader.containerRef.value = newVal;
     pdfReader.containerRef.value = newVal;
     markdownReader.containerRef.value = newVal;
+    htmlReader.containerRef.value = newVal;
     webReader.containerRef.value = newVal;
   }
 });
@@ -343,6 +353,8 @@ async function openFile(file) {
     await pdfReader.openFile(file);
   } else if (extension === "md" || extension === "markdown") {
     await markdownReader.openFile(file);
+  } else if (extension === "html" || extension === "htm") {
+    await htmlReader.openFile(file);
   } else {
     // Try to open as URL if it looks like a URL
     const fileName = file.name.toLowerCase();
