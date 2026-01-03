@@ -97,6 +97,10 @@ app.on('web-contents-created', (event, contents) => {
 // IPC handler for applying font size to iframe using extension
 ipcMain.handle('apply-iframe-font-size', async (event, iframeId, fontSize) => {
   try {
+    if (typeof iframeId !== 'string' || Number.isNaN(Number.parseInt(String(fontSize), 10))) {
+      return { success: false, error: 'Invalid parameters' }
+    }
+
     // 通常のiframeではwebContentsを直接取得できないため、
     // メインウィンドウのwebContentsからiframeを探して拡張機能のコンテンツスクリプトにメッセージを送信
     const mainWindow = BrowserWindow.fromWebContents(event.sender)
@@ -118,6 +122,15 @@ ipcMain.handle('apply-iframe-font-size', async (event, iframeId, fontSize) => {
             return { success: false, error: 'Iframe not found' };
           }
 
+          const targetOrigin = (() => {
+            try {
+              const origin = new URL(iframe.src || '', window.location.href).origin;
+              return origin || '*';
+            } catch (e) {
+              return '*';
+            }
+          })();
+
           // iframe内で拡張機能のコンテンツスクリプトにメッセージを送信
           // クロスオリジン制限により、evalは失敗する可能性が高いため、最初からpostMessageを使用
           try {
@@ -125,8 +138,8 @@ ipcMain.handle('apply-iframe-font-size', async (event, iframeId, fontSize) => {
               type: 'PARALLEL_READ_FONT_SIZE',
               action: 'apply-font-size',
               fontSize: ${fontSize}
-            }, '*');
-            return { success: true, method: 'postMessage' };
+            }, targetOrigin);
+            return { success: true, method: 'postMessage', targetOrigin };
           } catch (postError) {
             console.error('postMessage failed:', postError);
             return { success: false, error: postError.message };
@@ -146,6 +159,10 @@ ipcMain.handle('apply-iframe-font-size', async (event, iframeId, fontSize) => {
 // IPC handler for preventing horizontal scroll in iframe using extension
 ipcMain.handle('prevent-iframe-horizontal-scroll', async (event, iframeId) => {
   try {
+    if (typeof iframeId !== 'string') {
+      return { success: false, error: 'Invalid parameters' }
+    }
+
     // 通常のiframeではwebContentsを直接取得できないため、
     // メインウィンドウのwebContentsからiframeを探して拡張機能のコンテンツスクリプトにメッセージを送信
     const mainWindow = BrowserWindow.fromWebContents(event.sender)
@@ -167,14 +184,23 @@ ipcMain.handle('prevent-iframe-horizontal-scroll', async (event, iframeId) => {
             return { success: false, error: 'Iframe not found' };
           }
 
+          const targetOrigin = (() => {
+            try {
+              const origin = new URL(iframe.src || '', window.location.href).origin;
+              return origin || '*';
+            } catch (e) {
+              return '*';
+            }
+          })();
+
           // iframe内で拡張機能のコンテンツスクリプトにメッセージを送信
           // クロスオリジン制限により、evalは失敗する可能性が高いため、最初からpostMessageを使用
           try {
             iframe.contentWindow.postMessage({
               type: 'PARALLEL_READ_SCROLL',
               action: 'prevent-horizontal-scroll'
-            }, '*');
-            return { success: true, method: 'postMessage' };
+            }, targetOrigin);
+            return { success: true, method: 'postMessage', targetOrigin };
           } catch (postError) {
             console.error('postMessage failed:', postError);
             return { success: false, error: postError.message };
@@ -232,6 +258,10 @@ ipcMain.handle('get-iframe-scroll-info', async (event, iframeId) => {
 // IPC handler for scrolling iframe
 ipcMain.handle('scroll-iframe', async (event, iframeId, distance) => {
   try {
+    if (typeof iframeId !== 'string' || typeof distance !== 'number' || Number.isNaN(distance)) {
+      return { success: false, error: 'Invalid parameters' }
+    }
+
     // 通常のiframeではwebContentsを直接取得できないため、
     // メインウィンドウのwebContentsからiframeを探してスクロールを実行
     const mainWindow = BrowserWindow.fromWebContents(event.sender)
@@ -247,7 +277,7 @@ ipcMain.handle('scroll-iframe', async (event, iframeId, distance) => {
 
     // メインウィンドウのwebContentsから、すべてのフレームに対してスクロールを実行
     // 拡張機能のコンテンツスクリプトがiframe内で実行されているため、
-    // executeJavaScriptで拡張機能のメッセージAPIを使用してスクロールを実行
+    // executeJavaScriptでpostMessageを使用してスクロールを実行
     const result = await mainWindow.webContents.executeJavaScript(`
       (async function() {
         try {
@@ -257,44 +287,24 @@ ipcMain.handle('scroll-iframe', async (event, iframeId, distance) => {
             return { success: false, error: 'Iframe not found' };
           }
 
+          const targetOrigin = (() => {
+            try {
+              const origin = new URL(iframe.src || '', window.location.href).origin;
+              return origin || '*';
+            } catch (e) {
+              return '*';
+            }
+          })();
+
           // iframe内で拡張機能のコンテンツスクリプトにメッセージを送信
           // コンテンツスクリプトはiframe内で実行されているため、クロスオリジン制限を回避できる
-          // 注意: iframe内から直接chrome.runtime.sendMessageを呼び出す必要がある
-          // そのため、iframe内でexecuteJavaScriptを実行する
-          try {
-            // iframe内で拡張機能のメッセージAPIを使用してスクロール
-            const iframeResult = await iframe.contentWindow.eval(\`
-              (async function() {
-                if (typeof chrome !== 'undefined' && chrome.runtime && chrome.runtime.sendMessage) {
-                  return await new Promise((resolve) => {
-                    chrome.runtime.sendMessage('${extensionId}', {
-                      action: 'scroll-by',
-                      distance: ${distance}
-                    }, (response) => {
-                      resolve(response || { success: true });
-                    });
-                  });
-                } else {
-                  // フォールバック: 直接スクロール
-                  window.scrollBy({
-                    top: ${distance},
-                    behavior: 'smooth'
-                  });
-                  return { success: true };
-                }
-              })();
-            \`);
-            return iframeResult;
-          } catch (evalError) {
-            // evalが失敗した場合（クロスオリジン制限）、postMessageを使用
-            console.warn('eval failed, trying postMessage:', evalError.message);
-            iframe.contentWindow.postMessage({
-              type: 'PARALLEL_READ_SCROLL',
-              action: 'scroll-by',
-              distance: ${distance}
-            }, '*');
-            return { success: true, method: 'postMessage' };
-          }
+          iframe.contentWindow.postMessage({
+            type: 'PARALLEL_READ_SCROLL',
+            action: 'scroll-by',
+            distance: ${distance}
+          }, targetOrigin);
+
+          return { success: true, method: 'postMessage', targetOrigin };
         } catch (error) {
           return { success: false, error: error.message };
         }
