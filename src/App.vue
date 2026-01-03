@@ -90,6 +90,9 @@ onMounted(() => {
 
   // Setup wheel event listeners for scroll sync (after mount)
   setupWheelSyncListeners()
+
+  // Listen for URL wheel scroll events from the wheel overlay
+  window.addEventListener('urlWheelScroll', handleUrlWheelSync, true)
 })
 
 // クロスオリジン制限により、iframe内からのメッセージ受信は不可能
@@ -98,11 +101,12 @@ onMounted(() => {
 onUnmounted(() => {
   window.removeEventListener('keydown', handleKeyDown)
   window.removeEventListener('resize', handleWindowResize)
+  window.removeEventListener('urlWheelScroll', handleUrlWheelSync, true)
   if (syncTimeout) clearTimeout(syncTimeout)
   isSyncing = false
   keyboardNavLock = false
   tocNavLock = false
-  
+
   // Remove wheel listeners
   if (wheelHandler0) {
     const container1 = reader1.value?.$el?.querySelector?.('.epub-content-0, .reader-view')
@@ -455,14 +459,86 @@ function handleWheelSync(event, sourceIndex) {
 
   // ============================================
   // URLリーダーのスクロール同期処理
-  // 
+  //
   // 注意: URLリーダーは仕様が異なるため、EPUB/Markdown/PDFとは別実装
   // - クロスオリジン制限により、iframe内のスクロールイベントは検出できない
   // - .reader-view上のホイールイベントのみ検出可能
   // - iframe内のスクロールを制御するには、webSecurity: falseが必要
-  // 
+  //
   // 仕様: READER_SPECIFICATIONS.md を参照（URLリーダーは別途実装中）
   // ============================================
+}
+
+/**
+ * URLリーダーのホイールイベント同期処理
+ *
+ * useWebReader.jsのwheel overlayから発火されるカスタムイベントを処理
+ * ソースペインのスクロールは既にuseWebReader.jsで実行済み
+ * ここではターゲットペインへの同期のみ実行
+ *
+ * @param {CustomEvent} event - urlWheelScrollカスタムイベント
+ */
+function handleUrlWheelSync(event) {
+  // Skip if sync mode is off or already syncing
+  if (!settingsStore.syncMode || isSyncing || keyboardNavLock || tocNavLock) return
+
+  const { paneIndex: sourceIndex, deltaY } = event.detail
+
+  // 両方のペインにファイルが開かれている場合のみ同期を実行
+  const hasFile1 = readerStore.books[0] !== null
+  const hasFile2 = readerStore.books[1] !== null
+  if (!hasFile1 || !hasFile2) return
+
+  const target = sourceIndex === 0 ? reader2.value : reader1.value
+  const targetType = readerStore.fileTypes[1 - sourceIndex]
+  const direction = deltaY > 0 ? 1 : -1
+
+  // Helper function to get scroll amount
+  function getScrollAmountForType(fileType, paneIdx) {
+    const targetRef = paneIdx === 0 ? reader1.value : reader2.value
+    if (targetRef?.calculateScrollDistance) {
+      return targetRef.calculateScrollDistance()
+    }
+    const settings = settingsStore.getScrollSettingsForType(fileType, paneIdx)
+    return settings.amount
+  }
+
+  // Helper function to get PDF page amount
+  function getPdfPageAmount(paneIdx) {
+    const settings = settingsStore.pdfScrollSettings[paneIdx] || { amount: 1, unit: 'page' }
+    return settings.amount
+  }
+
+  // Sync to target pane based on its type
+  if (targetType === 'url') {
+    // URL-URL sync: scroll the target URL reader
+    const scrollAmount = target?.calculateScrollDistance?.() || 100
+    target?.scrollBy?.(direction * scrollAmount * settingsStore.syncSensitivity)
+  } else if (targetType === 'epub') {
+    // URL-EPUB sync: scroll the target EPUB
+    const targetContainer = target?.$el?.querySelector?.(`.epub-content-${1 - sourceIndex}`)
+    if (targetContainer) {
+      const scrollAmount = getScrollAmountForType('epub', 1 - sourceIndex)
+      targetContainer.scrollBy({
+        top: direction * scrollAmount * settingsStore.syncSensitivity,
+        behavior: 'smooth'
+      })
+    }
+  } else if (targetType === 'markdown') {
+    // URL-Markdown sync: scroll the target Markdown
+    const targetContainer = target?.$el?.querySelector?.('.reader-view')
+    if (targetContainer) {
+      const scrollAmount = getScrollAmountForType('markdown', 1 - sourceIndex)
+      targetContainer.scrollBy({
+        top: direction * scrollAmount * settingsStore.syncSensitivity,
+        behavior: 'smooth'
+      })
+    }
+  } else if (targetType === 'pdf') {
+    // URL-PDF sync: page navigation on target PDF
+    const pageAmount = getPdfPageAmount(1 - sourceIndex)
+    target?.pageBy?.(direction * pageAmount)
+  }
 }
 
 /**

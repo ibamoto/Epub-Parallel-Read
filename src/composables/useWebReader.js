@@ -8,12 +8,15 @@ export function useWebReader(paneIndex) {
 
   const containerRef = ref(null)
   const isReady = ref(false)
-  let iframe = null
+  let iframe = null // Can be iframe or webview element
+  let isWebview = false // True if using Electron webview
   let currentUrl = null
   let currentFontSize = 100
   let scrollInfoRequestId = 0
   const pendingScrollInfoRequests = new Map()
   let messageListener = null
+  let wheelOverlay = null // Transparent overlay to capture wheel events for cross-origin iframes
+  let wheelHandler = null // Stored handler for cleanup
 
   function getTargetOrigin() {
     if (!currentUrl) return '*'
@@ -151,35 +154,108 @@ export function useWebReader(paneIndex) {
       min-height: 0;
     `
 
-    // Create iframe
-    iframe = document.createElement('iframe')
-    iframe.id = `web-reader-iframe-${paneIndex}`
-    iframe.className = 'web-reader-iframe'
-    iframe.style.cssText = `
-      width: 100%;
-      height: 100%;
-      border: none;
-      background: white;
-      overflow: auto;
-      display: block;
+    // Use webview in Electron environment for better cross-origin control
+    // Use iframe in browser environment
+    isWebview = typeof window !== 'undefined' && !!window.electronAPI
+
+    if (isWebview) {
+      // Create webview element (Electron only)
+      iframe = document.createElement('webview')
+      iframe.id = `web-reader-webview-${paneIndex}`
+      iframe.className = 'web-reader-webview'
+      iframe.style.cssText = `
+        width: 100%;
+        height: 100%;
+        border: none;
+        background: white;
+        display: block;
+        position: absolute;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        min-width: 0;
+        min-height: 0;
+      `
+      // Enable node integration for webview to use executeJavaScript
+      iframe.setAttribute('webpreferences', 'contextIsolation=yes')
+      iframe.setAttribute('allowpopups', '')
+
+      // Listen for dom-ready event to apply initial settings
+      iframe.addEventListener('dom-ready', () => {
+        console.log('WebReader: webview dom-ready')
+        isReady.value = true
+        preventHorizontalScroll()
+        // Apply initial font size
+        if (currentFontSize !== 100) {
+          applyFontSizeToWebview(currentFontSize)
+        }
+      })
+    } else {
+      // Create iframe (browser environment)
+      iframe = document.createElement('iframe')
+      iframe.id = `web-reader-iframe-${paneIndex}`
+      iframe.className = 'web-reader-iframe'
+      iframe.style.cssText = `
+        width: 100%;
+        height: 100%;
+        border: none;
+        background: white;
+        overflow: auto;
+        display: block;
+        position: absolute;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        min-width: 0;
+        min-height: 0;
+      `
+      iframe.setAttribute('scrolling', 'yes')
+      iframe.setAttribute('referrerpolicy', 'no-referrer-when-downgrade')
+    }
+
+    container.appendChild(iframe)
+
+    // Add transparent overlay to capture wheel events for cross-origin iframes
+    // This overlay sits on top of the iframe but allows wheel events to be captured
+    // and forwarded to both the iframe content and the sync mechanism
+    wheelOverlay = document.createElement('div')
+    wheelOverlay.id = `web-reader-wheel-overlay-${paneIndex}`
+    wheelOverlay.className = 'web-reader-wheel-overlay'
+    wheelOverlay.style.cssText = `
       position: absolute;
       top: 0;
       left: 0;
       right: 0;
       bottom: 0;
-      min-width: 0;
-      min-height: 0;
+      z-index: 10;
+      background: transparent;
+      cursor: default;
     `
-    iframe.setAttribute('scrolling', 'yes')
-    // sandbox属性を調整して、スクリプト実行とメッセージ送信を許可
-    // webSecurity: falseが設定されているため、sandbox属性を削除してより多くの権限を許可
-    // iframe.setAttribute('sandbox', 'allow-same-origin allow-scripts allow-forms allow-popups allow-modals')
-    iframe.setAttribute('referrerpolicy', 'no-referrer-when-downgrade')
+    container.appendChild(wheelOverlay)
 
-    // クロスオリジン制限により、iframe内へのスクリプト注入は不可能
-    // 代わりに、.reader-view上のホイールイベントを使用してスクロール同期を実現
+    // Setup wheel event handler on the overlay
+    wheelHandler = (event) => {
+      // Calculate scroll distance
+      const scrollDistance = event.deltaY
 
-    container.appendChild(iframe)
+      // Scroll the iframe/webview content
+      scrollBy(scrollDistance)
+
+      // Dispatch a custom event for App.vue to handle sync
+      // This allows the wheel sync mechanism in App.vue to work for URL mode
+      const syncEvent = new CustomEvent('urlWheelScroll', {
+        bubbles: true,
+        detail: {
+          paneIndex,
+          deltaY: event.deltaY,
+          scrollDistance
+        }
+      })
+      container.dispatchEvent(syncEvent)
+    }
+    wheelOverlay.addEventListener('wheel', wheelHandler, { passive: true })
 
     // Force resize after a short delay to ensure layout is complete
     setTimeout(() => {
@@ -242,17 +318,29 @@ export function useWebReader(paneIndex) {
   function next() {
     console.log('WebReader.next called', {
       hasIframe: !!iframe,
-      hasContentWindow: !!(iframe && iframe.contentWindow),
+      isWebview,
       paneIndex
     })
 
-    if (!iframe || !iframe.contentWindow) {
-      console.warn('WebReader.next: iframe or contentWindow not available')
+    if (!iframe) {
+      console.warn('WebReader.next: iframe/webview not available')
       return
     }
 
     const scrollAmount = calculateScrollDistance()
     console.log('WebReader.next: scrolling down by', scrollAmount, 'px')
+
+    // webviewの場合はexecuteJavaScriptを使用
+    if (isWebview && iframe.executeJavaScript) {
+      scrollWebview(scrollAmount)
+      return
+    }
+
+    // iframe の場合
+    if (!iframe.contentWindow) {
+      console.warn('WebReader.next: contentWindow not available')
+      return
+    }
 
     const targetOrigin = getTargetOrigin()
     const isSameOrigin =
@@ -300,17 +388,29 @@ export function useWebReader(paneIndex) {
   function prev() {
     console.log('WebReader.prev called', {
       hasIframe: !!iframe,
-      hasContentWindow: !!(iframe && iframe.contentWindow),
+      isWebview,
       paneIndex
     })
 
-    if (!iframe || !iframe.contentWindow) {
-      console.warn('WebReader.prev: iframe or contentWindow not available')
+    if (!iframe) {
+      console.warn('WebReader.prev: iframe/webview not available')
       return
     }
 
     const scrollAmount = calculateScrollDistance()
     console.log('WebReader.prev: scrolling up by', scrollAmount, 'px')
+
+    // webviewの場合はexecuteJavaScriptを使用
+    if (isWebview && iframe.executeJavaScript) {
+      scrollWebview(-scrollAmount)
+      return
+    }
+
+    // iframe の場合
+    if (!iframe.contentWindow) {
+      console.warn('WebReader.prev: contentWindow not available')
+      return
+    }
 
     const targetOrigin = getTargetOrigin()
     const isSameOrigin =
@@ -471,7 +571,7 @@ export function useWebReader(paneIndex) {
   // Scroll by distance (supports vh unit conversion when distance is passed with unit info)
   // distance can be a number (px) or will be calculated using vh if settings specify
   function scrollBy(distance, useSettings = false) {
-    if (!iframe || !iframe.contentWindow) {
+    if (!iframe) {
       return
     }
 
@@ -479,6 +579,17 @@ export function useWebReader(paneIndex) {
     if (useSettings) {
       // Calculate based on settings
       actualDistance = (distance > 0 ? 1 : -1) * calculateScrollDistance()
+    }
+
+    // webviewの場合はexecuteJavaScriptを使用
+    if (isWebview && iframe.executeJavaScript) {
+      scrollWebview(actualDistance)
+      return
+    }
+
+    // iframe の場合
+    if (!iframe.contentWindow) {
+      return
     }
 
     const targetOrigin = getTargetOrigin()
@@ -512,6 +623,52 @@ export function useWebReader(paneIndex) {
     }
   }
 
+  // Scroll webview using executeJavaScript (Electron only)
+  function scrollWebview(distance) {
+    if (!iframe || !iframe.executeJavaScript) {
+      console.warn('scrollWebview: webview not available')
+      return
+    }
+
+    iframe.executeJavaScript(`
+      window.scrollBy({
+        top: ${distance},
+        behavior: 'smooth'
+      });
+    `).catch(err => {
+      console.error('scrollWebview failed:', err)
+    })
+  }
+
+  // Apply font size to webview using executeJavaScript (Electron only)
+  function applyFontSizeToWebview(size) {
+    if (!iframe || !iframe.executeJavaScript) {
+      console.warn('applyFontSizeToWebview: webview not available')
+      return
+    }
+
+    const scale = Math.max(0.5, Math.min(2, size / 100))
+
+    iframe.executeJavaScript(`
+      (function() {
+        let styleEl = document.getElementById('epub-parallel-read-font-size-style');
+        if (!styleEl) {
+          styleEl = document.createElement('style');
+          styleEl.id = 'epub-parallel-read-font-size-style';
+          document.head.appendChild(styleEl);
+        }
+        styleEl.textContent = \`
+          html, body {
+            font-size: ${size}% !important;
+            zoom: ${scale} !important;
+          }
+        \`;
+      })();
+    `).catch(err => {
+      console.error('applyFontSizeToWebview failed:', err)
+    })
+  }
+
   // Scroll by vh unit (for external calls from App.vue)
   function scrollByVh(vhAmount) {
     if (!iframe) return
@@ -531,6 +688,13 @@ export function useWebReader(paneIndex) {
 
     console.log('WebReader.applyFontSize called:', size)
 
+    // webviewの場合はexecuteJavaScriptを使用
+    if (isWebview && iframe.executeJavaScript) {
+      applyFontSizeToWebview(size)
+      return
+    }
+
+    // iframe の場合
     const targetOrigin = getTargetOrigin()
     const isSameOrigin =
       targetOrigin !== '*' &&
@@ -821,6 +985,13 @@ export function useWebReader(paneIndex) {
 
     // Clear pending requests
     pendingScrollInfoRequests.clear()
+
+    // Remove wheel overlay and handler
+    if (wheelOverlay && wheelHandler) {
+      wheelOverlay.removeEventListener('wheel', wheelHandler)
+    }
+    wheelOverlay = null
+    wheelHandler = null
 
     if (iframe) {
       iframe.src = 'about:blank'
