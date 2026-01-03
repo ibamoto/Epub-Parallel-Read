@@ -64,10 +64,25 @@
 
     const messageType = event.data.type
     const isParallelReadMessage = messageType === 'PARALLEL_READ_SCROLL' ||
-                                   messageType === 'PARALLEL_READ_FONT_SIZE'
+                                   messageType === 'PARALLEL_READ_FONT_SIZE' ||
+                                   messageType === 'PARALLEL_READ_WHEEL'
 
     // PARALLEL_READ_* 以外のメッセージは無視（セキュリティ）
     if (!isParallelReadMessage) {
+      return
+    }
+
+    // 子フレームからのPARALLEL_READ_WHEELメッセージを親に転送
+    // これにより、ネストされたiframeからのwheelイベントが
+    // 最終的にトップレベルのiframeからアプリに送信される
+    if (messageType === 'PARALLEL_READ_WHEEL') {
+      if (window.parent && window.parent !== window) {
+        try {
+          window.parent.postMessage(event.data, '*');
+        } catch (e) {
+          // Ignore errors if parent is not accessible
+        }
+      }
       return
     }
 
