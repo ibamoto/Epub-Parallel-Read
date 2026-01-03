@@ -15,7 +15,6 @@ export function useWebReader(paneIndex) {
   let scrollInfoRequestId = 0
   const pendingScrollInfoRequests = new Map()
   let messageListener = null
-  let wheelOverlay = null // Transparent overlay to capture wheel events for cross-origin iframes
   let wheelHandler = null // Stored handler for cleanup
 
   function getTargetOrigin() {
@@ -217,25 +216,11 @@ export function useWebReader(paneIndex) {
 
     container.appendChild(iframe)
 
-    // Add transparent overlay to capture wheel events for cross-origin iframes
-    // This overlay sits on top of the iframe but allows wheel events to be captured
-    // and forwarded to both the iframe content and the sync mechanism
-    wheelOverlay = document.createElement('div')
-    wheelOverlay.id = `web-reader-wheel-overlay-${paneIndex}`
-    wheelOverlay.className = 'web-reader-wheel-overlay'
-    wheelOverlay.style.cssText = `
-      position: absolute;
-      top: 0;
-      left: 0;
-      right: 0;
-      bottom: 0;
-      z-index: 10;
-      background: transparent;
-      cursor: default;
-    `
-    container.appendChild(wheelOverlay)
-
-    // Setup wheel event handler on the overlay
+    // Setup wheel event handler on the container with capture phase
+    // This captures wheel events before they reach the iframe, allowing us to:
+    // 1. Scroll the iframe content manually
+    // 2. Dispatch sync events to App.vue
+    // Using capture: true ensures we get the event before the iframe
     wheelHandler = (event) => {
       // Calculate scroll distance
       const scrollDistance = event.deltaY
@@ -255,7 +240,7 @@ export function useWebReader(paneIndex) {
       })
       container.dispatchEvent(syncEvent)
     }
-    wheelOverlay.addEventListener('wheel', wheelHandler, { passive: true })
+    container.addEventListener('wheel', wheelHandler, { passive: true, capture: true })
 
     // Force resize after a short delay to ensure layout is complete
     setTimeout(() => {
@@ -986,11 +971,10 @@ export function useWebReader(paneIndex) {
     // Clear pending requests
     pendingScrollInfoRequests.clear()
 
-    // Remove wheel overlay and handler
-    if (wheelOverlay && wheelHandler) {
-      wheelOverlay.removeEventListener('wheel', wheelHandler)
+    // Remove wheel handler from container
+    if (containerRef.value && wheelHandler) {
+      containerRef.value.removeEventListener('wheel', wheelHandler, { capture: true })
     }
-    wheelOverlay = null
     wheelHandler = null
 
     if (iframe) {
