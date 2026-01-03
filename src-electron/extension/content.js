@@ -392,7 +392,10 @@
           type: 'PARALLEL_READ_WHEEL',
           deltaY: event.deltaY,
           deltaX: event.deltaX,
-          url: window.location.href
+          url: window.location.href,
+          // Include screen coordinates for pane detection
+          screenX: event.screenX,
+          screenY: event.screenY
         }, '*');
       } catch (e) {
         // Ignore errors if parent is not accessible
