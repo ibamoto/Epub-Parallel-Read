@@ -511,9 +511,8 @@ function handleUrlWheelSync(event) {
 
   // Sync to target pane based on its type
   if (targetType === 'url') {
-    // URL-URL sync: scroll the target URL reader
-    const scrollAmount = target?.calculateScrollDistance?.() || 100
-    target?.scrollBy?.(direction * scrollAmount * settingsStore.syncSensitivity)
+    // URL-URL sync: scroll the target URL reader with same deltaY (same pixel amount)
+    target?.scrollBy?.(deltaY * settingsStore.syncSensitivity)
   } else if (targetType === 'epub') {
     // URL-EPUB sync: scroll the target EPUB
     const targetContainer = target?.$el?.querySelector?.(`.epub-content-${1 - sourceIndex}`)
