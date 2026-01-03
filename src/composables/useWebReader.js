@@ -210,12 +210,29 @@ export function useWebReader(paneIndex) {
   }
 
   /**
+   * Calculate scroll distance based on settings (supports px and vh units)
+   */
+  function calculateScrollDistance() {
+    const settings = settingsStore.urlScrollSettings[paneIndex] || { amount: 50, unit: 'vh' }
+    let scrollAmount = settings.amount
+
+    if (settings.unit === 'vh') {
+      // Convert vh to pixels based on iframe's viewport height
+      const viewportHeight = iframe?.clientHeight || window.innerHeight
+      scrollAmount = (settings.amount / 100) * viewportHeight
+    }
+    // 'px' unit uses the amount directly
+
+    return scrollAmount
+  }
+
+  /**
    * 次へナビゲーション（下方向スクロール）
-   * 
+   *
    * 注意: URLリーダーは仕様が異なるため、EPUB/Markdown/PDFとは別実装
    * - EPUB/Markdown/PDF: セクション/ページ単位の移動
-   * - URL: 設定されたスクロール量で下方向にスクロール
-   * 
+   * - URL: 設定されたスクロール量で下方向にスクロール (vh単位対応)
+   *
    * @see READER_SPECIFICATIONS.md (EPUB/Markdown/PDFの仕様)
    */
   function next() {
@@ -224,20 +241,20 @@ export function useWebReader(paneIndex) {
       hasContentWindow: !!(iframe && iframe.contentWindow),
       paneIndex
     })
-    
+
     if (!iframe || !iframe.contentWindow) {
       console.warn('WebReader.next: iframe or contentWindow not available')
       return
     }
 
-    const scrollAmount = settingsStore.scrollAmounts[paneIndex] || 100
+    const scrollAmount = calculateScrollDistance()
     console.log('WebReader.next: scrolling down by', scrollAmount, 'px')
 
     // クロスオリジン制限により、直接iframe内のscrollByにアクセスできない
     // ElectronのIPC経由で拡張機能のコンテンツスクリプトを使用してスクロールを実行
     try {
       const iframeWindow = iframe.contentWindow
-      
+
       // まず直接スクロールを試行（同じオリジンの場合）
       iframeWindow.scrollBy({
         top: scrollAmount,
@@ -247,7 +264,7 @@ export function useWebReader(paneIndex) {
     } catch (e) {
       // クロスオリジン制限により直接スクロールできない場合
       console.warn('WebReader.next: direct scroll failed, trying Electron IPC method:', e.message)
-      
+
       // ElectronのIPC経由でiframeのwebContentsに対してスクロールを実行
       // 拡張機能のコンテンツスクリプトはiframe内で実行されるため、クロスオリジン制限を回避できる
       if (typeof window !== 'undefined' && window.electronAPI) {
@@ -267,11 +284,11 @@ export function useWebReader(paneIndex) {
 
   /**
    * 前へナビゲーション（上方向スクロール）
-   * 
+   *
    * 注意: URLリーダーは仕様が異なるため、EPUB/Markdown/PDFとは別実装
    * - EPUB/Markdown/PDF: セクション/ページ単位の移動
-   * - URL: 設定されたスクロール量で上方向にスクロール
-   * 
+   * - URL: 設定されたスクロール量で上方向にスクロール (vh単位対応)
+   *
    * @see READER_SPECIFICATIONS.md (EPUB/Markdown/PDFの仕様)
    */
   function prev() {
@@ -280,20 +297,20 @@ export function useWebReader(paneIndex) {
       hasContentWindow: !!(iframe && iframe.contentWindow),
       paneIndex
     })
-    
+
     if (!iframe || !iframe.contentWindow) {
       console.warn('WebReader.prev: iframe or contentWindow not available')
       return
     }
 
-    const scrollAmount = settingsStore.scrollAmounts[paneIndex] || 100
+    const scrollAmount = calculateScrollDistance()
     console.log('WebReader.prev: scrolling up by', scrollAmount, 'px')
 
     // クロスオリジン制限により、直接iframe内のscrollByにアクセスできない
     // ElectronのIPC経由で拡張機能のコンテンツスクリプトを使用してスクロールを実行
     try {
       const iframeWindow = iframe.contentWindow
-      
+
       // まず直接スクロールを試行（同じオリジンの場合）
       iframeWindow.scrollBy({
         top: -scrollAmount,
@@ -303,7 +320,7 @@ export function useWebReader(paneIndex) {
     } catch (e) {
       // クロスオリジン制限により直接スクロールできない場合
       console.warn('WebReader.prev: direct scroll failed, trying Electron IPC method:', e.message)
-      
+
       // クロスオリジン制限により直接スクロールできない場合
       // postMessageを使用してiframe内の拡張機能コンテンツスクリプトにメッセージを送信
       // コンテンツスクリプトはiframe内で実行されているため、クロスオリジン制限を回避できる
@@ -318,7 +335,7 @@ export function useWebReader(paneIndex) {
         console.log('WebReader.prev: postMessage sent')
       } catch (postError) {
         console.error('WebReader.prev: postMessage failed:', postError)
-        
+
         // フォールバック: Electron IPC経由でスクロールを試行
         if (typeof window !== 'undefined' && window.electronAPI) {
           const iframeId = iframe.id || `web-reader-iframe-${paneIndex}`
@@ -334,7 +351,7 @@ export function useWebReader(paneIndex) {
     }
   }
 
-  // Get scroll info for sync
+  // Get scroll info for sync (synchronous - may fail for cross-origin)
   function getScrollInfo() {
     if (!iframe || !iframe.contentWindow) return null
 
@@ -354,9 +371,54 @@ export function useWebReader(paneIndex) {
         scrollRatio,
       }
     } catch (error) {
-      // Cross-origin restriction - return null to indicate sync is not possible
+      // Cross-origin restriction - return null to indicate sync is not possible synchronously
       return null
     }
+  }
+
+  // Get scroll info asynchronously (works for cross-origin via postMessage)
+  async function getScrollInfoAsync() {
+    if (!iframe || !iframe.contentWindow) return null
+
+    // First, try synchronous access
+    const syncResult = getScrollInfo()
+    if (syncResult !== null) {
+      return syncResult
+    }
+
+    // Fall back to postMessage for cross-origin
+    return new Promise((resolve, reject) => {
+      const requestId = `scroll-info-${paneIndex}-${++scrollInfoRequestId}`
+      const timeoutMs = 2000
+
+      const timeoutId = setTimeout(() => {
+        pendingScrollInfoRequests.delete(requestId)
+        resolve(null) // Return null on timeout instead of rejecting
+      }, timeoutMs)
+
+      pendingScrollInfoRequests.set(requestId, {
+        resolve: (data) => {
+          clearTimeout(timeoutId)
+          resolve(data.scrollInfo || null)
+        },
+        reject: (error) => {
+          clearTimeout(timeoutId)
+          resolve(null) // Return null on error instead of rejecting
+        }
+      })
+
+      try {
+        iframe.contentWindow.postMessage({
+          type: 'PARALLEL_READ_SCROLL',
+          action: 'get-scroll-info',
+          requestId: requestId
+        }, '*')
+      } catch (e) {
+        clearTimeout(timeoutId)
+        pendingScrollInfoRequests.delete(requestId)
+        resolve(null)
+      }
+    })
   }
 
   // Set scroll position by ratio
@@ -380,25 +442,52 @@ export function useWebReader(paneIndex) {
     }
   }
 
-  // Scroll by distance
-  function scrollBy(distance) {
+  // Scroll by distance (supports vh unit conversion when distance is passed with unit info)
+  // distance can be a number (px) or will be calculated using vh if settings specify
+  function scrollBy(distance, useSettings = false) {
     if (!iframe || !iframe.contentWindow) {
       return
     }
 
+    let actualDistance = distance
+    if (useSettings) {
+      // Calculate based on settings
+      actualDistance = (distance > 0 ? 1 : -1) * calculateScrollDistance()
+    }
+
     try {
       const iframeWindow = iframe.contentWindow
-      
+
       // webSecurity: falseが設定されているため、クロスオリジン制限は緩和されている
       // 直接scrollByを試行
       iframeWindow.scrollBy({
-        top: distance,
+        top: actualDistance,
         behavior: 'smooth',
       })
     } catch (error) {
-      // Cross-origin restriction - webSecurity: falseでも一部のサイトでは失敗する可能性がある
-      // エラーを無視して続行（ユーザーには影響しない）
+      // Cross-origin restriction - postMessage経由でスクロール
+      try {
+        iframe.contentWindow.postMessage({
+          type: 'PARALLEL_READ_SCROLL',
+          action: 'scroll-by',
+          distance: actualDistance
+        }, '*')
+      } catch (postError) {
+        // Fallback to Electron IPC
+        if (typeof window !== 'undefined' && window.electronAPI) {
+          const iframeId = iframe.id || `web-reader-iframe-${paneIndex}`
+          window.electronAPI.scrollIframe(iframeId, actualDistance)
+        }
+      }
     }
+  }
+
+  // Scroll by vh unit (for external calls from App.vue)
+  function scrollByVh(vhAmount) {
+    if (!iframe) return
+    const viewportHeight = iframe.clientHeight || window.innerHeight
+    const pxAmount = (vhAmount / 100) * viewportHeight
+    scrollBy(pxAmount)
   }
 
   // Apply font size to iframe content
@@ -663,6 +752,12 @@ export function useWebReader(paneIndex) {
 
   // Cleanup
   function cleanup() {
+    // Remove message listener
+    removeMessageListener()
+
+    // Clear pending requests
+    pendingScrollInfoRequests.clear()
+
     if (iframe) {
       iframe.src = 'about:blank'
       iframe = null
@@ -691,8 +786,11 @@ export function useWebReader(paneIndex) {
     next,
     prev,
     getScrollInfo,
+    getScrollInfoAsync,
     setScrollByRatio,
     scrollBy,
+    scrollByVh,
+    calculateScrollDistance,
     applySettings,
     applyFontSize,
     preventHorizontalScroll,

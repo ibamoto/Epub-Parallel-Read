@@ -349,16 +349,30 @@ export function useMarkdownReader(paneIndex) {
   }
 
   /**
+   * Calculate scroll distance based on Markdown settings (supports px unit)
+   */
+  function calculateScrollDistance() {
+    const settings = settingsStore.markdownScrollSettings[paneIndex] || { amount: 100, unit: 'px' }
+    // Markdown only supports px unit
+    return settings.amount
+  }
+
+  /**
    * 指定距離だけスクロール
-   * 
+   *
    * 仕様: READER_SPECIFICATIONS.md を参照
    * - containerRef.value.scrollBy を使用
-   * 
+   *
    * @param {number} distance - スクロール距離（ピクセル単位、正の値は下方向）
+   * @param {boolean} useSettings - trueの場合、設定から距離を計算
    */
-  function scrollBy(distance) {
+  function scrollBy(distance, useSettings = false) {
     if (!containerRef.value) return
-    containerRef.value.scrollBy({ top: distance, behavior: 'smooth' })
+    let actualDistance = distance
+    if (useSettings) {
+      actualDistance = (distance > 0 ? 1 : -1) * calculateScrollDistance()
+    }
+    containerRef.value.scrollBy({ top: actualDistance, behavior: 'smooth' })
   }
 
   // Apply settings
@@ -396,6 +410,7 @@ export function useMarkdownReader(paneIndex) {
     getScrollInfo,
     setScrollByRatio,
     scrollBy,
+    calculateScrollDistance,
     applySettings,
     applyTheme,
     cleanup,

@@ -32,11 +32,48 @@ export const useSettingsStore = defineStore('settings', () => {
   const showControls = ref(true)
   const syncSensitivity = ref(1.0)
 
+  // Keyboard shortcut for sync mode toggle
+  // Options: 'ctrl+shift+s', 'alt+s', 'ctrl+/', 'none'
+  const syncModeShortcut = ref('ctrl+shift+s')
 
-  // Per-pane scroll amount (in pixels for EPUB)
+  // Available shortcut options
+  const shortcutOptions = [
+    { value: 'ctrl+shift+s', label: 'Ctrl+Shift+S', macLabel: 'Cmd+Shift+S' },
+    { value: 'alt+s', label: 'Alt+S', macLabel: 'Option+S' },
+    { value: 'ctrl+/', label: 'Ctrl+/', macLabel: 'Cmd+/' },
+    { value: 'none', label: '無効', macLabel: '無効' },
+  ]
+
+
+  // Per-pane, per-file-type scroll settings
+  // Each setting has: { amount: number, unit: 'px' | 'page' | 'vh' }
+
+  // EPUB scroll settings (supports 'px' and 'page' units)
+  const epubScrollSettings = ref([
+    { amount: 100, unit: 'px' },
+    { amount: 100, unit: 'px' }
+  ])
+
+  // Markdown scroll settings (supports 'px' unit)
+  const markdownScrollSettings = ref([
+    { amount: 100, unit: 'px' },
+    { amount: 100, unit: 'px' }
+  ])
+
+  // URL scroll settings (supports 'vh' unit - viewport height percentage)
+  const urlScrollSettings = ref([
+    { amount: 50, unit: 'vh' },
+    { amount: 50, unit: 'vh' }
+  ])
+
+  // PDF scroll settings (supports 'page' unit)
+  const pdfScrollSettings = ref([
+    { amount: 1, unit: 'page' },
+    { amount: 1, unit: 'page' }
+  ])
+
+  // Legacy: kept for backwards compatibility during migration
   const scrollAmounts = ref([100, 100])
-
-  // Per-pane PDF page amount (pages per navigation)
   const pdfPageAmounts = ref([1, 1])
 
   // Per-pane URL font size (percentage, default 100%)
@@ -81,7 +118,27 @@ export const useSettingsStore = defineStore('settings', () => {
         syncMode.value = parsed.syncMode ?? false
         showControls.value = parsed.showControls ?? true
         syncSensitivity.value = parsed.syncSensitivity ?? 1.0
+        syncModeShortcut.value = parsed.syncModeShortcut ?? 'ctrl+shift+s'
         theme.value = parsed.theme ?? 'light'
+        // New per-file-type scroll settings
+        epubScrollSettings.value = parsed.epubScrollSettings ?? [
+          { amount: 100, unit: 'px' },
+          { amount: 100, unit: 'px' }
+        ]
+        markdownScrollSettings.value = parsed.markdownScrollSettings ?? [
+          { amount: 100, unit: 'px' },
+          { amount: 100, unit: 'px' }
+        ]
+        urlScrollSettings.value = parsed.urlScrollSettings ?? [
+          { amount: 50, unit: 'vh' },
+          { amount: 50, unit: 'vh' }
+        ]
+        pdfScrollSettings.value = parsed.pdfScrollSettings ?? [
+          { amount: 1, unit: 'page' },
+          { amount: 1, unit: 'page' }
+        ]
+
+        // Legacy settings (for backwards compatibility)
         scrollAmounts.value = parsed.scrollAmounts ?? [100, 100]
         pdfPageAmounts.value = parsed.pdfPageAmounts ?? [1, 1]
         urlFontSizes.value = parsed.urlFontSizes ?? [100, 100]
@@ -112,9 +169,16 @@ export const useSettingsStore = defineStore('settings', () => {
         syncMode: syncMode.value,
         showControls: showControls.value,
         syncSensitivity: syncSensitivity.value,
+        syncModeShortcut: syncModeShortcut.value,
         theme: theme.value,
         customColors: customColors.value,
         paneSettings: paneSettings.value,
+        // New per-file-type scroll settings
+        epubScrollSettings: epubScrollSettings.value,
+        markdownScrollSettings: markdownScrollSettings.value,
+        urlScrollSettings: urlScrollSettings.value,
+        pdfScrollSettings: pdfScrollSettings.value,
+        // Legacy settings (for backwards compatibility)
         scrollAmounts: scrollAmounts.value,
         pdfPageAmounts: pdfPageAmounts.value,
         urlFontSizes: urlFontSizes.value,
@@ -141,6 +205,11 @@ export const useSettingsStore = defineStore('settings', () => {
 
   function toggleControls() {
     showControls.value = !showControls.value
+    saveSettings()
+  }
+
+  function setSyncModeShortcut(value) {
+    syncModeShortcut.value = value
     saveSettings()
   }
 
@@ -189,6 +258,54 @@ export const useSettingsStore = defineStore('settings', () => {
     showProgressBar.value[paneIndex] = value
   }
 
+  // Update EPUB scroll settings for a pane
+  function setEpubScrollSettings(paneIndex, amount, unit) {
+    const newSettings = [...epubScrollSettings.value]
+    newSettings[paneIndex] = { amount, unit }
+    epubScrollSettings.value = newSettings
+    saveSettings()
+  }
+
+  // Update Markdown scroll settings for a pane
+  function setMarkdownScrollSettings(paneIndex, amount, unit) {
+    const newSettings = [...markdownScrollSettings.value]
+    newSettings[paneIndex] = { amount, unit }
+    markdownScrollSettings.value = newSettings
+    saveSettings()
+  }
+
+  // Update URL scroll settings for a pane
+  function setUrlScrollSettings(paneIndex, amount, unit) {
+    const newSettings = [...urlScrollSettings.value]
+    newSettings[paneIndex] = { amount, unit }
+    urlScrollSettings.value = newSettings
+    saveSettings()
+  }
+
+  // Update PDF scroll settings for a pane
+  function setPdfScrollSettings(paneIndex, amount, unit) {
+    const newSettings = [...pdfScrollSettings.value]
+    newSettings[paneIndex] = { amount, unit }
+    pdfScrollSettings.value = newSettings
+    saveSettings()
+  }
+
+  // Helper to get scroll amount for a specific file type and pane
+  function getScrollSettingsForType(fileType, paneIndex) {
+    switch (fileType) {
+      case 'epub':
+        return epubScrollSettings.value[paneIndex] || { amount: 100, unit: 'px' }
+      case 'markdown':
+        return markdownScrollSettings.value[paneIndex] || { amount: 100, unit: 'px' }
+      case 'url':
+        return urlScrollSettings.value[paneIndex] || { amount: 50, unit: 'vh' }
+      case 'pdf':
+        return pdfScrollSettings.value[paneIndex] || { amount: 1, unit: 'page' }
+      default:
+        return { amount: 100, unit: 'px' }
+    }
+  }
+
   // Set theme
   function setTheme(newTheme) {
     theme.value = newTheme
@@ -224,7 +341,7 @@ export const useSettingsStore = defineStore('settings', () => {
   }
 
   // Auto-save on changes
-  watch([isDarkMode, syncMode, showControls, syncSensitivity, theme, customColors, paneSettings, scrollAmounts, pdfPageAmounts, urlFontSizes, useWheelAmount, showProgressBar], () => {
+  watch([isDarkMode, syncMode, showControls, syncSensitivity, syncModeShortcut, theme, customColors, paneSettings, scrollAmounts, pdfPageAmounts, urlFontSizes, useWheelAmount, showProgressBar, epubScrollSettings, markdownScrollSettings, urlScrollSettings, pdfScrollSettings], () => {
     saveSettings()
   }, { deep: true })
 
@@ -234,10 +351,18 @@ export const useSettingsStore = defineStore('settings', () => {
     syncMode,
     showControls,
     syncSensitivity,
+    syncModeShortcut,
+    shortcutOptions,
     theme,
     customColors,
     paneSettings,
     fontOptions,
+    // New per-file-type scroll settings
+    epubScrollSettings,
+    markdownScrollSettings,
+    urlScrollSettings,
+    pdfScrollSettings,
+    // Legacy settings (for backwards compatibility)
     scrollAmounts,
     pdfPageAmounts,
     urlFontSizes,
@@ -250,12 +375,19 @@ export const useSettingsStore = defineStore('settings', () => {
     toggleDarkMode,
     toggleSyncMode,
     toggleControls,
+    setSyncModeShortcut,
     updatePaneSettings,
     resetPaneSettings,
     setScrollAmount,
     setPdfPageAmount,
     setUrlFontSize,
     setShowProgressBar,
+    // New per-file-type scroll setting functions
+    setEpubScrollSettings,
+    setMarkdownScrollSettings,
+    setUrlScrollSettings,
+    setPdfScrollSettings,
+    getScrollSettingsForType,
     setTheme,
     getThemeColors,
   }

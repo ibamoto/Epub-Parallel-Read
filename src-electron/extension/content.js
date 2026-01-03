@@ -83,8 +83,26 @@
           console.log('Content script: received scroll message', event.data.distance);
           scrollBy(event.data.distance);
           console.log('Content script: scroll executed');
+          // Send response back to parent
+          if (event.source) {
+            event.source.postMessage({
+              type: 'PARALLEL_READ_RESPONSE',
+              action: 'scroll-by',
+              requestId: event.data.requestId,
+              success: true
+            }, '*');
+          }
         } catch (error) {
           console.error('Content script: error scrolling via postMessage:', error);
+          if (event.source) {
+            event.source.postMessage({
+              type: 'PARALLEL_READ_RESPONSE',
+              action: 'scroll-by',
+              requestId: event.data.requestId,
+              success: false,
+              error: error.message
+            }, '*');
+          }
         }
       } else if (event.data.action === 'prevent-horizontal-scroll') {
         try {
@@ -93,6 +111,57 @@
           console.log('Content script: horizontal scroll prevention applied');
         } catch (error) {
           console.error('Content script: error preventing horizontal scroll via postMessage:', error);
+        }
+      } else if (event.data.action === 'get-scroll-info') {
+        try {
+          console.log('Content script: received get-scroll-info request');
+          const scrollInfo = getScrollInfo();
+          // Send scroll info back to parent
+          if (event.source) {
+            event.source.postMessage({
+              type: 'PARALLEL_READ_RESPONSE',
+              action: 'get-scroll-info',
+              requestId: event.data.requestId,
+              success: true,
+              scrollInfo: scrollInfo
+            }, '*');
+          }
+          console.log('Content script: scroll info sent', scrollInfo);
+        } catch (error) {
+          console.error('Content script: error getting scroll info via postMessage:', error);
+          if (event.source) {
+            event.source.postMessage({
+              type: 'PARALLEL_READ_RESPONSE',
+              action: 'get-scroll-info',
+              requestId: event.data.requestId,
+              success: false,
+              error: error.message
+            }, '*');
+          }
+        }
+      } else if (event.data.action === 'set-scroll-ratio') {
+        try {
+          console.log('Content script: received set-scroll-ratio request', event.data.ratio);
+          setScrollByRatio(event.data.ratio);
+          if (event.source) {
+            event.source.postMessage({
+              type: 'PARALLEL_READ_RESPONSE',
+              action: 'set-scroll-ratio',
+              requestId: event.data.requestId,
+              success: true
+            }, '*');
+          }
+        } catch (error) {
+          console.error('Content script: error setting scroll ratio via postMessage:', error);
+          if (event.source) {
+            event.source.postMessage({
+              type: 'PARALLEL_READ_RESPONSE',
+              action: 'set-scroll-ratio',
+              requestId: event.data.requestId,
+              success: false,
+              error: error.message
+            }, '*');
+          }
         }
       }
     } else if (event.data && event.data.type === 'PARALLEL_READ_FONT_SIZE') {
