@@ -64,25 +64,10 @@
 
     const messageType = event.data.type
     const isParallelReadMessage = messageType === 'PARALLEL_READ_SCROLL' ||
-                                   messageType === 'PARALLEL_READ_FONT_SIZE' ||
-                                   messageType === 'PARALLEL_READ_WHEEL'
+                                   messageType === 'PARALLEL_READ_FONT_SIZE'
 
     // PARALLEL_READ_* 以外のメッセージは無視（セキュリティ）
     if (!isParallelReadMessage) {
-      return
-    }
-
-    // 子フレームからのPARALLEL_READ_WHEELメッセージを親に転送
-    // これにより、ネストされたiframeからのwheelイベントが
-    // 最終的にトップレベルのiframeからアプリに送信される
-    if (messageType === 'PARALLEL_READ_WHEEL') {
-      if (window.parent && window.parent !== window) {
-        try {
-          window.parent.postMessage(event.data, '*');
-        } catch (e) {
-          // Ignore errors if parent is not accessible
-        }
-      }
       return
     }
 
@@ -391,7 +376,6 @@
 
   // Setup wheel event listener to forward wheel events to parent for sync
   // This allows the parent window to sync scroll between panes
-  // Use capture phase to ensure we get the event before the page can stop propagation
   let wheelThrottleTimer = null;
   window.addEventListener('wheel', (event) => {
     // Throttle wheel events to avoid overwhelming the parent
@@ -414,7 +398,7 @@
         // Ignore errors if parent is not accessible
       }
     }
-  }, { passive: true, capture: true });
+  }, { passive: true });
 
   // Notify background script that content script is ready
   chrome.runtime.sendMessage({
