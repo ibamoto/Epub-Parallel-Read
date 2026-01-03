@@ -15,8 +15,7 @@ export function useWebReader(paneIndex) {
   let scrollInfoRequestId = 0
   const pendingScrollInfoRequests = new Map()
   let messageListener = null
-  let wheelOverlay = null // Transparent overlay to capture wheel events for cross-origin iframes
-  let wheelHandler = null // Stored handler for cleanup
+  let wheelMessageListener = null // Listener for wheel events from content.js
 
   function getTargetOrigin() {
     if (!currentUrl) return '*'
@@ -217,45 +216,11 @@ export function useWebReader(paneIndex) {
 
     container.appendChild(iframe)
 
-    // Add transparent overlay to capture wheel events for cross-origin iframes
-    // This overlay sits on top of the iframe but allows wheel events to be captured
-    // and forwarded to both the iframe content and the sync mechanism
-    wheelOverlay = document.createElement('div')
-    wheelOverlay.id = `web-reader-wheel-overlay-${paneIndex}`
-    wheelOverlay.className = 'web-reader-wheel-overlay'
-    wheelOverlay.style.cssText = `
-      position: absolute;
-      top: 0;
-      left: 0;
-      right: 0;
-      bottom: 0;
-      z-index: 10;
-      background: transparent;
-      cursor: default;
-    `
-    container.appendChild(wheelOverlay)
-
-    // Setup wheel event handler on the overlay
-    wheelHandler = (event) => {
-      // Calculate scroll distance
-      const scrollDistance = event.deltaY
-
-      // Scroll the iframe/webview content
-      scrollBy(scrollDistance)
-
-      // Dispatch a custom event for App.vue to handle sync
-      // This allows the wheel sync mechanism in App.vue to work for URL mode
-      const syncEvent = new CustomEvent('urlWheelScroll', {
-        bubbles: true,
-        detail: {
-          paneIndex,
-          deltaY: event.deltaY,
-          scrollDistance
-        }
-      })
-      container.dispatchEvent(syncEvent)
-    }
-    wheelOverlay.addEventListener('wheel', wheelHandler, { passive: true })
+    // Setup listener for wheel events from content.js (extension)
+    // The content script runs inside the iframe and captures wheel events,
+    // then sends them to the parent via postMessage
+    // This approach works reliably for cross-origin iframes
+    addWheelMessageListener()
 
     // Force resize after a short delay to ensure layout is complete
     setTimeout(() => {
@@ -475,6 +440,42 @@ export function useWebReader(paneIndex) {
     if (!messageListener) return
     window.removeEventListener('message', messageListener)
     messageListener = null
+  }
+
+  // Add listener for wheel events from content.js in iframe
+  function addWheelMessageListener() {
+    if (wheelMessageListener) return
+
+    wheelMessageListener = (event) => {
+      // Only process PARALLEL_READ_WHEEL messages
+      if (!event?.data || event.data.type !== 'PARALLEL_READ_WHEEL') return
+
+      // Check if this message is from our iframe
+      // The event.source should be the iframe's contentWindow
+      if (!iframe || event.source !== iframe.contentWindow) return
+
+      const { deltaY } = event.data
+
+      // Dispatch a custom event for App.vue to handle sync
+      // This allows the wheel sync mechanism in App.vue to work for URL mode
+      const syncEvent = new CustomEvent('urlWheelScroll', {
+        bubbles: true,
+        detail: {
+          paneIndex,
+          deltaY,
+          scrollDistance: deltaY
+        }
+      })
+      containerRef.value?.dispatchEvent(syncEvent)
+    }
+
+    window.addEventListener('message', wheelMessageListener)
+  }
+
+  function removeWheelMessageListener() {
+    if (!wheelMessageListener) return
+    window.removeEventListener('message', wheelMessageListener)
+    wheelMessageListener = null
   }
 
   // Get scroll info for sync (synchronous - may fail for cross-origin)
@@ -980,18 +981,12 @@ export function useWebReader(paneIndex) {
 
   // Cleanup
   function cleanup() {
-    // Remove message listener
+    // Remove message listeners
     removeMessageListener()
+    removeWheelMessageListener()
 
     // Clear pending requests
     pendingScrollInfoRequests.clear()
-
-    // Remove wheel overlay and handler
-    if (wheelOverlay && wheelHandler) {
-      wheelOverlay.removeEventListener('wheel', wheelHandler)
-    }
-    wheelOverlay = null
-    wheelHandler = null
 
     if (iframe) {
       iframe.src = 'about:blank'
