@@ -56,7 +56,7 @@
 
   // Listen for postMessage from parent window (for cross-origin iframe scrolling and styling)
   window.addEventListener('message', (event) => {
-    // Security: 信頼できるソースからのメッセージのみ処理
+    // Security: 信頼できるソースのみ処理（親ウィンドウは常に許可）
     const trustedOrigins = new Set()
     try {
       const referrerOrigin = new URL(document.referrer || '').origin
@@ -70,7 +70,8 @@
     // For file:// origins, event.origin is "null"
     trustedOrigins.add('null')
 
-    const isTrustedOrigin = event.origin && trustedOrigins.has(event.origin)
+    const isParent = event.source && event.source === window.parent
+    const isTrustedOrigin = (event.origin && trustedOrigins.has(event.origin)) || isParent
 
     if (!isTrustedOrigin) {
       console.warn('Content script: rejected postMessage from untrusted origin', event.origin)
@@ -180,6 +181,7 @@
   // Apply font size to the document
   function applyFontSize(size) {
     console.log('Content script: applyFontSize called with size:', size);
+    const scale = Math.max(0.5, Math.min(2, size / 100));
     let styleEl = document.getElementById('epub-parallel-read-font-size-style');
     if (!styleEl) {
       styleEl = document.createElement('style');
@@ -208,6 +210,7 @@
         width: 100% !important;
         height: 100% !important;
         font-size: ${size}% !important;
+        zoom: ${scale} !important;
       }
       body {
         overflow-x: hidden !important;
@@ -216,6 +219,7 @@
         margin: 0 !important;
         padding: 0 !important;
         font-size: ${size}% !important;
+        zoom: ${scale} !important;
         box-sizing: border-box !important;
       }
       /* Apply max-width to main content containers */

@@ -11,6 +11,9 @@ export function useWebReader(paneIndex) {
   let iframe = null
   let currentUrl = null
   let currentFontSize = 100
+  let scrollInfoRequestId = 0
+  const pendingScrollInfoRequests = new Map()
+  let messageListener = null
 
   function getTargetOrigin() {
     if (!currentUrl) return '*'
@@ -56,6 +59,7 @@ export function useWebReader(paneIndex) {
 
     try {
       cleanup()
+      addMessageListener()
 
       const normalizedUrl = normalizeUrl(urlString)
       if (!normalizedUrl) {
@@ -351,6 +355,37 @@ export function useWebReader(paneIndex) {
     }
   }
 
+  // Listen for iframe postMessage responses (e.g., scroll info)
+  function addMessageListener() {
+    if (messageListener) return
+
+    messageListener = (event) => {
+      if (!event?.data || event.data.type !== 'PARALLEL_READ_RESPONSE') return
+
+      const { requestId, success, error } = event.data
+      if (!requestId) return
+
+      const handlers = pendingScrollInfoRequests.get(requestId)
+      if (!handlers) return
+
+      pendingScrollInfoRequests.delete(requestId)
+
+      if (success) {
+        handlers.resolve(event.data)
+      } else if (typeof handlers.reject === 'function') {
+        handlers.reject(new Error(error || 'Failed to get scroll info'))
+      }
+    }
+
+    window.addEventListener('message', messageListener)
+  }
+
+  function removeMessageListener() {
+    if (!messageListener) return
+    window.removeEventListener('message', messageListener)
+    messageListener = null
+  }
+
   // Get scroll info for sync (synchronous - may fail for cross-origin)
   function getScrollInfo() {
     if (!iframe || !iframe.contentWindow) return null
@@ -492,13 +527,40 @@ export function useWebReader(paneIndex) {
 
   // Apply font size to iframe content
   function applyFontSize(size) {
-    if (!iframe || !iframe.contentWindow) {
+    currentFontSize = size
+
+    if (!iframe) {
       console.warn('Cannot apply font size: iframe not ready')
       return
     }
-    currentFontSize = size
 
     console.log('WebReader.applyFontSize called:', size)
+
+    const targetOrigin = getTargetOrigin()
+    const isSameOrigin =
+      targetOrigin !== '*' &&
+      targetOrigin !== 'null' &&
+      targetOrigin === window.location.origin
+
+    // まずは同一オリジンの場合のみ直接DOMへ適用
+    if (isSameOrigin) {
+      try {
+        applyFontSizeToDocument(size)
+        return
+      } catch (directErr) {
+        console.warn('Direct applyFontSizeToDocument failed, falling back:', directErr)
+      }
+    }
+
+    // iframeはあるがcontentWindowがまだ無い場合はスケールで暫定対応しつつ後で再試行
+    if (!iframe.contentWindow) {
+      setTimeout(() => {
+        if (iframe?.contentWindow) {
+          applyFontSize(size)
+        }
+      }, 200)
+      return
+    }
 
     // クロスオリジン制限により、直接iframe内のdocumentにアクセスできない
     // Electron IPC経由で拡張機能のコンテンツスクリプトを使用してフォントサイズを適用
@@ -515,7 +577,6 @@ export function useWebReader(paneIndex) {
           console.error('WebReader.applyFontSize: Electron IPC failed:', err)
           // フォールバック: postMessageを使用
           try {
-            const targetOrigin = getTargetOrigin()
             iframe.contentWindow.postMessage({
               type: 'PARALLEL_READ_FONT_SIZE',
               action: 'apply-font-size',
@@ -524,6 +585,7 @@ export function useWebReader(paneIndex) {
             console.log('WebReader.applyFontSize: postMessage sent (fallback)')
           } catch (postError) {
             console.error('WebReader.applyFontSize: postMessage failed:', postError)
+            applyFontSizeFallback(size)
           }
         })
     } else {
