@@ -392,23 +392,19 @@ function handleWheelSync(event, sourceIndex) {
       })
     }
   }
-  // URL-URL: 両方のiframeをスクロール（vh単位対応）
+  // URL-URL: ターゲットペインのみスクロール（ソースはブラウザのネイティブスクロールに任せる）
+  // 注意: ソースペインは明示的にスクロールしない。ホイールイベントがiframeに伝播するため、
+  // ソースペインはブラウザのネイティブスクロールで処理される。
+  // 明示的にスクロールするとダブルスクロールになり、スクロール量が一致しなくなる。
   else if (sourceType === 'url' && targetType === 'url') {
-    // ソースペインのスクロール (calculateScrollDistanceを使用)
-    const sourceScrollAmount = source?.calculateScrollDistance?.() || 100
-    source?.scrollBy?.(direction * sourceScrollAmount)
-
-    // ターゲットペインのスクロール
+    // ターゲットペインのスクロールのみ実行
     const targetScrollAmount = target?.calculateScrollDistance?.() || 100
     target?.scrollBy?.(direction * targetScrollAmount * settingsStore.syncSensitivity)
   }
-  // URL-EPUB: URLをスクロール、EPUBをスクロール
+  // URL-EPUB: URLはブラウザのネイティブスクロールに任せ、EPUBをスクロール
   else if (sourceType === 'url' && targetType === 'epub') {
-    // ソースペイン（URL）のスクロール
-    const sourceScrollAmount = source?.calculateScrollDistance?.() || 100
-    source?.scrollBy?.(direction * sourceScrollAmount)
-
-    // ターゲットペイン（EPUB）のスクロール
+    // ソースペイン（URL）はブラウザのネイティブスクロールで処理されるため、明示的なスクロールは不要
+    // ターゲットペイン（EPUB）のスクロールのみ実行
     const targetContainer = target?.$el?.querySelector?.(`.epub-content-${1 - sourceIndex}`)
     if (targetContainer) {
       const scrollAmount = getScrollAmountForType('epub', 1 - sourceIndex)
@@ -424,13 +420,10 @@ function handleWheelSync(event, sourceIndex) {
     const scrollAmount = target?.calculateScrollDistance?.() || 100
     target?.scrollBy?.(direction * scrollAmount * settingsStore.syncSensitivity)
   }
-  // URL-Markdown: URLをスクロール、Markdownをスクロール
+  // URL-Markdown: URLはブラウザのネイティブスクロールに任せ、Markdownをスクロール
   else if (sourceType === 'url' && targetType === 'markdown') {
-    // ソースペイン（URL）のスクロール
-    const sourceScrollAmount = source?.calculateScrollDistance?.() || 100
-    source?.scrollBy?.(direction * sourceScrollAmount)
-
-    // ターゲットペイン（Markdown）のスクロール
+    // ソースペイン（URL）はブラウザのネイティブスクロールで処理されるため、明示的なスクロールは不要
+    // ターゲットペイン（Markdown）のスクロールのみ実行
     const targetContainer = target?.$el?.querySelector?.('.reader-view')
     if (targetContainer) {
       const scrollAmount = getScrollAmountForType('markdown', 1 - sourceIndex)
@@ -446,13 +439,10 @@ function handleWheelSync(event, sourceIndex) {
     const scrollAmount = target?.calculateScrollDistance?.() || 100
     target?.scrollBy?.(direction * scrollAmount * settingsStore.syncSensitivity)
   }
-  // URL-PDF: URLをスクロール、PDFでページ移動
+  // URL-PDF: URLはブラウザのネイティブスクロールに任せ、PDFでページ移動
   else if (sourceType === 'url' && targetType === 'pdf') {
-    // ソースペイン（URL）のスクロール
-    const sourceScrollAmount = source?.calculateScrollDistance?.() || 100
-    source?.scrollBy?.(direction * sourceScrollAmount)
-
-    // ターゲットペイン（PDF）のページ移動
+    // ソースペイン（URL）はブラウザのネイティブスクロールで処理されるため、明示的なスクロールは不要
+    // ターゲットペイン（PDF）のページ移動のみ実行
     const pageAmount = getPdfPageAmount(1 - sourceIndex)
     target?.pageBy?.(direction * pageAmount)
   }
