@@ -67,6 +67,28 @@ function createWindow() {
 }
 
 app.whenReady().then(async () => {
+  // Remove X-Frame-Options and Content-Security-Policy headers to allow iframe embedding
+  // This is necessary to display sites like Yahoo.co.jp that set X-Frame-Options: deny
+  session.defaultSession.webRequest.onHeadersReceived((details, callback) => {
+    const responseHeaders = { ...details.responseHeaders }
+
+    // Remove headers that prevent iframe embedding (case-insensitive)
+    const headersToRemove = [
+      'x-frame-options',
+      'X-Frame-Options',
+      'content-security-policy',
+      'Content-Security-Policy',
+      'content-security-policy-report-only',
+      'Content-Security-Policy-Report-Only'
+    ]
+
+    for (const header of headersToRemove) {
+      delete responseHeaders[header]
+    }
+
+    callback({ responseHeaders })
+  })
+
   // Load extension before creating window
   await loadExtension()
   createWindow()
