@@ -15,7 +15,7 @@ export function useWebReader(paneIndex) {
   let scrollInfoRequestId = 0
   const pendingScrollInfoRequests = new Map()
   let messageListener = null
-  let wheelHandler = null // Stored handler for cleanup
+  let wheelMessageListener = null // Listener for wheel events from content.js
 
   function getTargetOrigin() {
     if (!currentUrl) return '*'
@@ -216,31 +216,11 @@ export function useWebReader(paneIndex) {
 
     container.appendChild(iframe)
 
-    // Setup wheel event handler on the container with capture phase
-    // This captures wheel events before they reach the iframe, allowing us to:
-    // 1. Scroll the iframe content manually
-    // 2. Dispatch sync events to App.vue
-    // Using capture: true ensures we get the event before the iframe
-    wheelHandler = (event) => {
-      // Calculate scroll distance
-      const scrollDistance = event.deltaY
-
-      // Scroll the iframe/webview content
-      scrollBy(scrollDistance)
-
-      // Dispatch a custom event for App.vue to handle sync
-      // This allows the wheel sync mechanism in App.vue to work for URL mode
-      const syncEvent = new CustomEvent('urlWheelScroll', {
-        bubbles: true,
-        detail: {
-          paneIndex,
-          deltaY: event.deltaY,
-          scrollDistance
-        }
-      })
-      container.dispatchEvent(syncEvent)
-    }
-    container.addEventListener('wheel', wheelHandler, { passive: true, capture: true })
+    // Setup listener for wheel events from content.js (extension)
+    // The content script runs inside the iframe and captures wheel events,
+    // then sends them to the parent via postMessage
+    // This approach works reliably for cross-origin iframes
+    addWheelMessageListener()
 
     // Force resize after a short delay to ensure layout is complete
     setTimeout(() => {
@@ -460,6 +440,42 @@ export function useWebReader(paneIndex) {
     if (!messageListener) return
     window.removeEventListener('message', messageListener)
     messageListener = null
+  }
+
+  // Add listener for wheel events from content.js in iframe
+  function addWheelMessageListener() {
+    if (wheelMessageListener) return
+
+    wheelMessageListener = (event) => {
+      // Only process PARALLEL_READ_WHEEL messages
+      if (!event?.data || event.data.type !== 'PARALLEL_READ_WHEEL') return
+
+      // Check if this message is from our iframe
+      // The event.source should be the iframe's contentWindow
+      if (!iframe || event.source !== iframe.contentWindow) return
+
+      const { deltaY } = event.data
+
+      // Dispatch a custom event for App.vue to handle sync
+      // This allows the wheel sync mechanism in App.vue to work for URL mode
+      const syncEvent = new CustomEvent('urlWheelScroll', {
+        bubbles: true,
+        detail: {
+          paneIndex,
+          deltaY,
+          scrollDistance: deltaY
+        }
+      })
+      containerRef.value?.dispatchEvent(syncEvent)
+    }
+
+    window.addEventListener('message', wheelMessageListener)
+  }
+
+  function removeWheelMessageListener() {
+    if (!wheelMessageListener) return
+    window.removeEventListener('message', wheelMessageListener)
+    wheelMessageListener = null
   }
 
   // Get scroll info for sync (synchronous - may fail for cross-origin)
@@ -965,17 +981,12 @@ export function useWebReader(paneIndex) {
 
   // Cleanup
   function cleanup() {
-    // Remove message listener
+    // Remove message listeners
     removeMessageListener()
+    removeWheelMessageListener()
 
     // Clear pending requests
     pendingScrollInfoRequests.clear()
-
-    // Remove wheel handler from container
-    if (containerRef.value && wheelHandler) {
-      containerRef.value.removeEventListener('wheel', wheelHandler, { capture: true })
-    }
-    wheelHandler = null
 
     if (iframe) {
       iframe.src = 'about:blank'

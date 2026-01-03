@@ -374,6 +374,32 @@
     preventHorizontalScroll();
   }
 
+  // Setup wheel event listener to forward wheel events to parent for sync
+  // This allows the parent window to sync scroll between panes
+  let wheelThrottleTimer = null;
+  window.addEventListener('wheel', (event) => {
+    // Throttle wheel events to avoid overwhelming the parent
+    if (wheelThrottleTimer) return;
+
+    wheelThrottleTimer = setTimeout(() => {
+      wheelThrottleTimer = null;
+    }, 50); // 50ms throttle
+
+    // Send wheel event to parent window for sync
+    if (window.parent && window.parent !== window) {
+      try {
+        window.parent.postMessage({
+          type: 'PARALLEL_READ_WHEEL',
+          deltaY: event.deltaY,
+          deltaX: event.deltaX,
+          url: window.location.href
+        }, '*');
+      } catch (e) {
+        // Ignore errors if parent is not accessible
+      }
+    }
+  }, { passive: true });
+
   // Notify background script that content script is ready
   chrome.runtime.sendMessage({
     action: 'content-script-ready',
