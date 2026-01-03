@@ -15,7 +15,7 @@
       class="sync-btn"
       :class="{ active: settingsStore.syncMode, disabled: !canSync }"
       @click="handleSyncToggle"
-      :title="canSync ? 'スクロール同期' : '2つのファイルを開いてください'"
+      :title="syncButtonTitle"
     >
       <span class="sync-icon">⇄</span>
       スクロール同期
@@ -404,6 +404,27 @@ const acceptTypes = ".epub,.pdf,.md,.markdown,.txt";
 // スクロール同期が可能かどうか（2つのファイルが開いている時のみ）
 const canSync = computed(() => {
   return readerStore.fileTypes[0] !== null && readerStore.fileTypes[1] !== null;
+});
+
+// ショートカットの表示文字列を取得
+const syncShortcutLabel = computed(() => {
+  const shortcut = settingsStore.syncModeShortcut;
+  if (shortcut === 'none') return '';
+
+  const isMac = navigator.platform.toUpperCase().indexOf('MAC') >= 0;
+  const option = settingsStore.shortcutOptions.find(opt => opt.value === shortcut);
+  if (!option) return '';
+
+  return isMac ? option.macLabel : option.label;
+});
+
+// スクロール同期ボタンのツールチップ
+const syncButtonTitle = computed(() => {
+  if (!canSync.value) {
+    return '2つのファイルを開いてください';
+  }
+  const shortcutHint = syncShortcutLabel.value ? ` (${syncShortcutLabel.value})` : '';
+  return `スクロール同期${shortcutHint}`;
 });
 
 const emit = defineEmits([
